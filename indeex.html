@@ -384,10 +384,8 @@
   .board-label {
     position: absolute;
     font-family: 'Cinzel', serif;
-    font-size: 0.55rem;
     font-weight: 700;
     letter-spacing: 0.05em;
-    opacity: 0.45;
     pointer-events: none;
     text-transform: uppercase;
     z-index: 0;
@@ -2071,24 +2069,45 @@ function renderBoard() {
 function addBoardLabels() {
   const board = document.getElementById('game-board');
   const labelData = [];
-  G.players.forEach(p => {
-    const z = CASTLE_ZONES[p.faction];
-    const cr = Math.floor((z.r1+z.r2)/2);
-    const cc = Math.floor((z.c1+z.c2)/2);
-    labelData.push({ r:cr, c:cc, text:p.name, color:FACTIONS[p.faction].color, opacity:0.5 });
-  });
+  
+  // Iterate through all possible factions to label every castle and room on the map,
+  // regardless of how many players are actively playing.
+  for (const faction in CASTLE_ZONES) {
+    const z = CASTLE_ZONES[faction];
+    const p = G.players.find(player => player.faction === faction);
+    const castleName = p ? p.name : FACTIONS[faction].name + ' Castle';
+    
+    // Label the castle itself at the center
+    const cr = Math.floor((z.r1 + z.r2) / 2);
+    const cc = Math.floor((z.c1 + z.c2) / 2);
+    labelData.push({ 
+      r: cr, c: cc, text: castleName, color: FACTIONS[faction].color, 
+      opacity: 0.6, fontSize: '0.45rem', top: '1px', left: '1px' 
+    });
+    
+    // Label each specific room inside the castle (Hospital, Prison, Armoury, Lab)
+    const rooms = getCastleRooms(faction);
+    for (const [room, rZone] of Object.entries(rooms)) {
+      labelData.push({ 
+        r: rZone.r1, c: rZone.c1, text: room, color: '#ffffff', 
+        opacity: 0.35, fontSize: '0.38rem', top: '2px', left: '2px' 
+      });
+    }
+  }
   
   labelData.forEach(l => {
-    const idx = l.r*BOARD_SIZE + l.c;
+    const idx = l.r * BOARD_SIZE + l.c;
     const cells = board.querySelectorAll('.board-cell');
-    if(cells[idx]) {
+    if (cells[idx]) {
       const lbl = document.createElement('div');
-      lbl.className='board-label';
-      lbl.style.color=l.color;
-      lbl.style.fontSize='0.45rem';
-      lbl.style.top='1px'; lbl.style.left='1px';
-      lbl.style.whiteSpace='nowrap';
-      lbl.textContent=l.text;
+      lbl.className = 'board-label';
+      lbl.style.color = l.color;
+      lbl.style.fontSize = l.fontSize;
+      lbl.style.opacity = l.opacity;
+      lbl.style.top = l.top;
+      lbl.style.left = l.left;
+      lbl.style.whiteSpace = 'nowrap';
+      lbl.textContent = l.text;
       cells[idx].appendChild(lbl);
     }
   });
