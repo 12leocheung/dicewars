@@ -326,7 +326,6 @@
 
   .board-cell.highlight-move { background: rgba(80,200,80,0.35) !important; cursor: pointer; }
   .board-cell.highlight-attack { background: rgba(220,50,50,0.4) !important; cursor: pointer; }
-  .board-cell.highlight-collect { background: rgba(212,160,23,0.45) !important; cursor: pointer; }
 
   .board-cell.castle-border-top { border-top: 3px solid var(--border-heavy); }
   .board-cell.castle-border-bottom { border-bottom: 3px solid var(--border-heavy); }
@@ -826,7 +825,7 @@
       <div class="panel-title">Actions</div>
       <button class="action-btn" id="btn-move" onclick="activateMoveMode()">🚶 Move <span class="ap-cost">1 AP</span></button>
       <button class="action-btn" id="btn-attack" onclick="activateAttackMode()">⚔ Attack <span class="ap-cost">1 AP</span></button>
-      <button class="action-btn" id="btn-collect" onclick="activateCollectMode()">📦 Collect Resource <span class="ap-cost">1 AP</span></button>
+      <button class="action-btn" id="btn-collect" onclick="doCollect()">📦 Collect Resource <span class="ap-cost">1 AP</span></button>
       <button class="action-btn" id="btn-heal" onclick="doHeal()">💊 Heal in Hospital <span class="ap-cost">1 AP</span></button>
       <button class="action-btn" id="btn-craft" onclick="openCraftModal()">🔨 Craft <span class="ap-cost">1 AP</span></button>
       <button class="action-btn" id="btn-new-soldier" onclick="doNewSoldier()">➕ New Soldier <span class="ap-cost">2 AP</span></button>
@@ -926,13 +925,7 @@ const RECIPES = [
   { id:'bandage',    name:'Bandage',    dmg:0, range:0, cost:{herbs:3},                           room:'armoury', lab:false, ability:'Use any time: heal 2 HP. Costs 1 AP.' },
 ];
 
-// Board layout: 16x16
-// Castles are 6x6 in each corner (rows 0-5 and 10-15, cols 0-5 and 10-15)
-// Each castle has 4 rooms (3x3 each), interior 4x4
-// No man's land is middle 4 columns/rows + castle border rows
-
 const BOARD_SIZE = 16;
-// Castle positions
 const CASTLES = {
   red:   { rows:[0,5],  cols:[5,15],  faction:'red',   name:'Red Castle'   },
   blue:  { rows:[0,5],  cols:[10,15], faction:'blue',  name:'Blue Castle'  },
@@ -940,77 +933,15 @@ const CASTLES = {
   white: { rows:[5,15], cols:[0,5],   faction:'white', name:'White Castle' },
 };
 
-// Proper 4-quadrant layout matching the board image:
-// Red=top-right, Blue=right (but text shows top-right=red, right=blue)
-// From image: red=top, blue=right, green=bottom, white=left
-// No man's land = center 8x8 (cols 4-11, rows 4-11)
-// Each castle is one of 4 corner 4x4+approach zones
-
-// Recalculate based on image:
-// Red castle: top rows 0-5, right cols 10-15 => NO
-// Image shows: Red=top-center, White=left, Blue=right, Green=bottom
-// Board is 16x16. Center NML = rows 4-11, cols 4-11 (8x8)
-// Castles each get an L-shaped or rectangular zone
-
-// Let's do: 4 castles each occupying one corner 6x6 region
-// Red: rows 0-5, cols 5-10 (top middle) -- doesn't match corners
-// Actually from the image it looks like:
-// Red = top (rows 0-3, cols 4-11) 
-// Blue = right (rows 4-11, cols 12-15)
-// Green = bottom (rows 12-15, cols 4-11)
-// White = left (rows 4-11, cols 0-3)
-// Corners are unclaimed (or belong to nearest castle)
-
-// Let's do the simpler 4-corner approach for gameplay:
-// Red: rows 0-6, cols 0-6 (top-left)
-// Blue: rows 0-6, cols 9-15 (top-right)
-// Green: rows 9-15, cols 0-6 (bottom-left)
-// White: rows 9-15, cols 9-15 (bottom-right)
-// NML: rows 4-11, cols 4-11 (8x8 center, overlapping with castles is fine)
-
-// Castle zone definitions (strict)
 const CASTLE_ZONES = {
-  // Top castle (Fire)
-  red: {
-    r1: 0,
-    r2: 3,
-    c1: 4,
-    c2: 11
-  },
-
-  // Right castle (Water)
-  blue: {
-    r1: 4,
-    r2: 11,
-    c1: 12,
-    c2: 15
-  },
-
-  // Bottom castle (Earth)
-  green: {
-    r1: 12,
-    r2: 15,
-    c1: 4,
-    c2: 11
-  },
-
-  // Left castle (Air)
-  white: {
-    r1: 4,
-    r2: 11,
-    c1: 0,
-    c2: 3
-  }
+  red: { r1: 0, r2: 3, c1: 4, c2: 11 },
+  blue: { r1: 4, r2: 11, c1: 12, c2: 15 },
+  green: { r1: 12, r2: 15, c1: 4, c2: 11 },
+  white: { r1: 4, r2: 11, c1: 0, c2: 3 }
 };
 
-// Rooms within each castle (relative to castle origin)
-// Castle is 7x7. Rooms divide into 4 quadrants (3x3 each)
-// hospital=top-left, prison=top-right, armoury=bottom-left, lab=bottom-right
 function getCastleRooms(faction) {
-
   switch (faction) {
-
-    // TOP CASTLE
     case "red":
       return {
         hospital: { r1:0, r2:1, c1:4, c2:7 },
@@ -1018,8 +949,6 @@ function getCastleRooms(faction) {
         armoury:  { r1:2, r2:3, c1:4, c2:7 },
         lab:      { r1:2, r2:3, c1:8, c2:11 }
       };
-
-    // RIGHT CASTLE
     case "blue":
       return {
         hospital: { r1:4, r2:7,  c1:12, c2:13 },
@@ -1027,8 +956,6 @@ function getCastleRooms(faction) {
         armoury:  { r1:8, r2:11, c1:12, c2:13 },
         lab:      { r1:8, r2:11, c1:14, c2:15 }
       };
-
-    // BOTTOM CASTLE
     case "green":
       return {
         hospital: { r1:12, r2:13, c1:4, c2:7 },
@@ -1036,8 +963,6 @@ function getCastleRooms(faction) {
         armoury:  { r1:14, r2:15, c1:4, c2:7 },
         lab:      { r1:14, r2:15, c1:8, c2:11 }
       };
-
-    // LEFT CASTLE
     case "white":
       return {
         hospital: { r1:4, r2:7,  c1:0, c2:1 },
@@ -1048,10 +973,7 @@ function getCastleRooms(faction) {
   }
 }
 
-// Trading tents: small 1x1 zones in corners of NML
-const TRADE_ZONES = [
-  {r:4,c:4}, {r:4,c:11}, {r:11,c:4}, {r:11,c:11}
-];
+const TRADE_ZONES = [ {r:4,c:4}, {r:4,c:11}, {r:11,c:4}, {r:11,c:11} ];
 
 // =====================================================================
 // STATE
@@ -1066,7 +988,7 @@ let G = {
   board: [],      // 16x16 array of cell data
   resources: [],  // [{r,c,type}]
   selectedUnit: null, // {playerId, unitId}
-  mode: null,     // null | 'move' | 'attack' | 'collect' | 'hostage'
+  mode: null,     // null | 'move' | 'attack' | 'hostage'
   pendingHostageTarget: null,
   selectedWeapon: null,
   pendingAttackTarget: null,
@@ -1075,12 +997,6 @@ let G = {
   maxPlayers: 3,
   surrenderedUnits: new Set(), // unitIds that have surrendered
 };
-
-// Player object:
-// { id, name, faction, units: [{id,r,c,hp,maxHp,prisoner,prisonerId}],
-//   resources:{wood,metal,chemicals,herbs,energy},
-//   inventory:[{weaponId,count}], ap:4, isMe:bool, isAI:bool, alive:bool,
-//   attackedThisTurn:Set }
 
 // =====================================================================
 // PEER CONNECTION
@@ -1099,124 +1015,6 @@ function initPeer(cb) {
   peer.on('error', e => console.error('Peer error:', e));
 }
 
-function showHostOptions() {
-  if(!validateLobbyInput()) return;
-  document.getElementById('lobby-main').style.display='none';
-  document.getElementById('lobby-host').style.display='block';
-  initPeer(id => {
-    const code = id.substring(0,6).toUpperCase();
-    document.getElementById('host-code').textContent = code;
-    document.getElementById('host-conn-status').textContent = 'Ready — waiting for players';
-    isHost = true;
-    // Add self to lobby
-    const p = { id: myPeerId, name: getPlayerName(), faction: getSelectedFaction() };
-    lobbyPlayers = [p];
-    G.myId = myPeerId;
-    updateLobbyPlayerList();
-
-    peer.on('connection', conn => {
-      conn.on('open', () => {
-        connections[conn.peer] = conn;
-        conn.on('data', d => handlePeerData(d, conn.peer));
-        conn.on('close', () => {
-          delete connections[conn.peer];
-          lobbyPlayers = lobbyPlayers.filter(x=>x.id!==conn.peer);
-          updateLobbyPlayerList();
-          broadcastToAll({ type:'lobby_update', players: lobbyPlayers });
-        });
-      });
-    });
-  });
-}
-
-function showJoinOptions() {
-  if(!validateLobbyInput()) return;
-  document.getElementById('lobby-main').style.display='none';
-  document.getElementById('lobby-join').style.display='block';
-  initPeer();
-}
-
-function backToMain() {
-  document.getElementById('lobby-main').style.display='block';
-  document.getElementById('lobby-host').style.display='none';
-  document.getElementById('lobby-join').style.display='none';
-  if(peer) { peer.destroy(); peer=null; }
-}
-
-function joinGame() {
-  const code = document.getElementById('join-code-input').value.trim();
-  if(!code) return;
-  document.getElementById('join-status').textContent = 'Connecting...';
-
-  // Find peer with this code prefix
-  // PeerJS IDs start with the code, so we try common peer server IDs
-  // The host code IS the first 6 chars of the peer ID, but we need the full ID
-  // Workaround: host broadcasts its full peer ID... but we don't have a signaling server.
-  // Solution: use the code directly as the peer ID (host sets it manually)
-  
-  // Re-initialise with predictable ID on host side not possible in basic PeerJS
-  // Instead we'll use a relay: the code IS the full peer ID (host uses short ID)
-  // Let's find the full ID by trying: peer IDs on the default server that start with this prefix
-  
-  // Simplest: make the host code = full peer ID displayed truncated, 
-  // and client connects to full ID. But we don't know the full ID.
-  // Better approach: host uses a fixed short custom ID = the code
-  
-  // Let's redo: host creates peer with custom short ID
-  backToMain();
-  document.getElementById('lobby-main').style.display='none';
-  document.getElementById('lobby-join').style.display='block';
-
-  G.myId = myPeerId || ('p_'+Math.random().toString(36).substr(2,8));
-  if(!peer) {
-    peer = new Peer(undefined, {debug:0});
-    peer.on('open', id => {
-      myPeerId = id;
-      G.myId = id;
-      doJoin(code);
-    });
-    peer.on('error', e => {
-      document.getElementById('join-status').textContent = 'Connection failed: ' + e.type;
-    });
-  } else {
-    doJoin(code);
-  }
-}
-
-function doJoin(hostId) {
-  // Try connecting with the full ID from code display
-  // The host's code-display shows id.substring(0,6).toUpperCase()
-  // So we need to search... Instead, let's just use a lobby approach where 
-  // host generates a 4-char code and stores peer ID server-side
-  // For simplicity: embed the host's FULL peer ID in a short relay
-  // 
-  // Actually simplest: just use the FULL peer ID as the room code
-  // and display all of it. Let's just show the full ID (it's about 36 chars, not ideal)
-  // OR: we hash it to a 4-letter code and store mapping client-side... no server.
-  //
-  // REAL solution: use PeerJS with a known ID prefix. Host creates Peer with ID = 'DICEWARS_' + code
-  // Client connects to 'DICEWARS_' + code
-  
-  const fullHostId = 'DICEWARS_' + hostId.toLowerCase();
-  hostConn = peer.connect(fullHostId, {reliable:true});
-  hostConn.on('open', () => {
-    document.getElementById('join-status').textContent = 'Connected!';
-    hostConn.on('data', d => handlePeerData(d, fullHostId));
-    hostConn.send({ type:'join_request', id:myPeerId, name:getPlayerName(), faction:getSelectedFaction() });
-    isHost = false;
-    document.getElementById('lobby-join').style.display='none';
-    document.getElementById('lobby-host').style.display='block';
-    document.getElementById('host-code').textContent = hostId.toUpperCase();
-    document.getElementById('btn-start-game').style.display='none';
-    document.querySelector('#lobby-host .count-btn').parentElement.style.display='none';
-    document.getElementById('host-conn-status').textContent = 'Waiting for host to start...';
-  });
-  hostConn.on('error', e => {
-    document.getElementById('join-status').textContent = 'Failed to connect. Check code.';
-  });
-}
-
-// Redo host with known ID
 function showHostOptionsNew() {
   if(!validateLobbyInput()) return;
   document.getElementById('lobby-main').style.display='none';
@@ -1258,8 +1056,6 @@ function showHostOptionsNew() {
     });
   });
 }
-
-// Override showHostOptions
 window.showHostOptions = showHostOptionsNew;
 
 function joinGameNew() {
@@ -1297,6 +1093,20 @@ function attemptJoin(code) {
   conn.on('error', () => document.getElementById('join-status').textContent='Could not connect. Check code.');
 }
 
+function showJoinOptions() {
+  if(!validateLobbyInput()) return;
+  document.getElementById('lobby-main').style.display='none';
+  document.getElementById('lobby-join').style.display='block';
+  initPeer();
+}
+
+function backToMain() {
+  document.getElementById('lobby-main').style.display='block';
+  document.getElementById('lobby-host').style.display='none';
+  document.getElementById('lobby-join').style.display='none';
+  if(peer) { peer.destroy(); peer=null; }
+}
+
 let maxPlayers = 3;
 function setMaxPlayers(n) {
   maxPlayers = n;
@@ -1323,40 +1133,17 @@ function handlePeerData(data, fromId) {
   switch(data.type) {
     case 'join_request':
       if(isHost) {
-
         const usedFactions = lobbyPlayers.map(p => p.faction);
-
         if (usedFactions.includes(data.faction)) {
-
-          if (connections[fromId]) {
-            connections[fromId].send({
-              type: "faction_taken"
-            });
-          }
-
+          if (connections[fromId]) connections[fromId].send({ type: "faction_taken" });
           return;
         }
-
-        const newP = {
-          id: data.id,
-          name: data.name,
-          faction: data.faction
-        };
-
+        const newP = { id: data.id, name: data.name, faction: data.faction };
         lobbyPlayers.push(newP);
-
         updateLobbyPlayerList();
-
-        broadcastToAll({
-          type: 'lobby_update',
-          players: lobbyPlayers
-        });
-
+        broadcastToAll({ type: 'lobby_update', players: lobbyPlayers });
         if (connections[fromId]) {
-          connections[fromId].send({
-            type: 'lobby_update',
-            players: lobbyPlayers
-          });
+          connections[fromId].send({ type: 'lobby_update', players: lobbyPlayers });
         }
       }
       break;
@@ -1370,9 +1157,6 @@ function handlePeerData(data, fromId) {
       break;
     case 'game_state':
       applyGameState(data.state);
-      break;
-    case 'action':
-      handleRemoteAction(data);
       break;
     case 'faction_taken':
       alert('That element has already been chosen. Please select another one.');
@@ -1431,7 +1215,6 @@ function receiveGameStart(state) {
 }
 
 function initGame(players) {
-  // Assign factions to players
   const factionList = ['red','blue','green','white'];
   
   G.players = players.slice(0, G.isAIGame ? players.length : Math.min(players.length, maxPlayers))
@@ -1449,7 +1232,6 @@ function initGame(players) {
       attackedThisTurn: [],
     }));
 
-  // Spawn starting units (4 per player)
   G.players.forEach(player => {
     const zone = CASTLE_ZONES[player.faction];
     const positions = getSpawnPositions(player.faction, 4);
@@ -1481,42 +1263,12 @@ function initGame(players) {
 }
 
 function getSpawnPositions(faction, count) {
-
   const positionsByFaction = {
-
-    // Top castle
-    red: [
-      {r:3,c:6},
-      {r:3,c:7},
-      {r:3,c:8},
-      {r:3,c:9}
-    ],
-
-    // Right castle
-    blue: [
-      {r:6,c:12},
-      {r:7,c:12},
-      {r:8,c:12},
-      {r:9,c:12}
-    ],
-
-    // Bottom castle
-    green: [
-      {r:12,c:6},
-      {r:12,c:7},
-      {r:12,c:8},
-      {r:12,c:9}
-    ],
-
-    // Left castle
-    white: [
-      {r:6,c:3},
-      {r:7,c:3},
-      {r:8,c:3},
-      {r:9,c:3}
-    ]
+    red: [ {r:3,c:6}, {r:3,c:7}, {r:3,c:8}, {r:3,c:9} ],
+    blue: [ {r:6,c:12}, {r:7,c:12}, {r:8,c:12}, {r:9,c:12} ],
+    green: [ {r:12,c:6}, {r:12,c:7}, {r:12,c:8}, {r:12,c:9} ],
+    white: [ {r:6,c:3}, {r:7,c:3}, {r:8,c:3}, {r:9,c:3} ]
   };
-
   return positionsByFaction[faction].slice(0, count);
 }
 
@@ -1627,10 +1379,8 @@ function endTurn() {
   const cp = currentPlayer();
   cp.attackedThisTurn = [];
   
-  // Check escape from prison
   checkPrisonEscapes();
   
-  // Advance turn
   let next = (G.turnIndex + 1) % G.players.length;
   let looped = 0;
   while(!G.players[next].alive && looped < G.players.length) {
@@ -1645,7 +1395,6 @@ function endTurn() {
     addLog(`--- Round ${G.round} begins ---`, 'log-system');
   }
   
-  // Reset AP
   G.players[G.turnIndex].ap = 4;
   G.selectedUnit = null;
   G.mode = null;
@@ -1675,7 +1424,6 @@ function checkPrisonEscapes() {
       !u.prisoner
     );
     if(!hasGuard) {
-      // Prisoners can try to escape
       G.players.forEach(captor => {
         captor.units.forEach(u => {
           if(u.prisoner && u.r >= prisonZone.r1 && u.r <= prisonZone.r2 &&
@@ -1684,7 +1432,6 @@ function checkPrisonEscapes() {
               u.prisoner = false;
               u.surrendered = false;
               addLog(`⛓ A prisoner escaped from ${captor.name}'s prison!`, 'log-system');
-              // Move to random adjacent free cell
               const spawn = getSpawnPositions(owner.faction, 1);
               if(spawn.length) { u.r = spawn[0].r; u.c = spawn[0].c; }
             }
@@ -1712,7 +1459,6 @@ function checkVictory() {
 // =====================================================================
 
 function spawnResources() {
-  // Spawn in NML (rows 4-11, cols 4-11 roughly)
   const nmlR1=4, nmlR2=11, nmlC1=4, nmlC2=11;
   const count = 3 + G.players.length;
   let attempts = 0;
@@ -1785,20 +1531,36 @@ function getWeaponsForAttack(player) {
   return RECIPES.filter(r=>ids.includes(r.id) && r.dmg>0 && r.id!=='bandage');
 }
 
-function activateCollectMode() {
-  if(!isMyTurn() || !G.selectedUnit) return;
-  const cp = currentPlayer();
-  if(cp.ap < 1) return;
-  G.mode = 'collect';
-  renderBoard();
-}
-
 function activateHostageMode() {
   if(!isMyTurn() || !G.selectedUnit) return;
   const cp = currentPlayer();
   if(cp.ap < 1) return;
   G.mode = 'hostage';
   renderBoard();
+}
+
+function doCollect() {
+  if(!isMyTurn() || !G.selectedUnit) return;
+  const cp = currentPlayer();
+  if(cp.ap < 1) { addLog('Not enough AP!'); return; }
+  
+  const selUnit = getSelectedUnitObj();
+  if(!selUnit) return;
+  
+  const res = getResourceAt(selUnit.r, selUnit.c);
+  if(!res) {
+    addLog('No resource under this unit!');
+    return;
+  }
+  
+  // Collect the resource
+  cp.resources[res.type] = (cp.resources[res.type]||0) + 1;
+  G.resources = G.resources.filter(x => !(x.r === selUnit.r && x.c === selUnit.c));
+  cp.ap--;
+  
+  addLog(`📦 Collected: ${RES_EMOJI[res.type]} ${res.type}`, 'log-craft');
+  G.mode = null;
+  finishAction();
 }
 
 function doHeal() {
@@ -1846,7 +1608,6 @@ function doNewSoldier() {
   const cp = currentPlayer();
   if(cp.ap < 2) { addLog('Need 2 AP for new soldier!'); return; }
   
-  // Check: must have a unit in the lab
   const rooms = getCastleRooms(cp.faction);
   const labZone = rooms.lab;
   const inLab = cp.units.some(u =>
@@ -1854,7 +1615,6 @@ function doNewSoldier() {
   );
   if(!inLab) { addLog('A unit must be in your Lab to spawn soldiers!'); return; }
   
-  // Cost: 1 of each resource
   if(cp.resources.wood<1 || cp.resources.metal<1 || cp.resources.chemicals<1 || cp.resources.herbs<1 || cp.resources.energy<1) {
     addLog('Need 1 of each resource to create a soldier!'); return;
   }
@@ -1892,13 +1652,11 @@ function openCraftModal() {
   
   const unit = getSelectedUnitObj();
   const roomInfo = getRoomAt(unit.r, unit.c);
-  const inOwnCastle = isInCastle(unit.r, unit.c, cp.faction);
   
   const list = document.getElementById('craft-recipe-list');
   list.innerHTML = '';
   
   RECIPES.forEach(recipe => {
-    // Check if right room
     const reqRoom = recipe.room;
     const isInRightRoom = roomInfo && roomInfo.room === reqRoom && roomInfo.faction === cp.faction;
     if(!isInRightRoom) return;
@@ -1936,7 +1694,6 @@ function doCraft(recipe) {
   const cp = currentPlayer();
   const unit = getSelectedUnitObj();
   
-  // Green bonus: free crafting in own castle
   const isFree = cp.faction === 'green' && isInCastle(unit.r, unit.c, cp.faction);
   
   if(!isFree) {
@@ -1972,19 +1729,10 @@ function onCellClick(r, c) {
     if(dist > maxMove || dist === 0) { G.mode=null; renderBoard(); return; }
     if(isOccupied(r,c,selUnit.id)) { addLog('Cell occupied!'); return; }
     
-    // Check for resource on this cell
-    const resHere = getResourceAt(r,c);
-    
     selUnit.r = r;
     selUnit.c = c;
     cp.ap--;
     addLog(`🚶 Moved to (${r},${c})`, 'log-move');
-    
-    // Auto-collect if resource present
-    if(resHere && cp.ap >= 1) {
-      // Player must end movement if picking up resource
-      // They still need to use collect action
-    }
     
     G.mode = null;
     finishAction();
@@ -2004,19 +1752,14 @@ function onCellClick(r, c) {
     const weapon = RECIPES.find(r=>r.id===G.selectedWeapon);
     if(!weapon) { G.mode=null; return; }
     
-    // Check range
     const dist = chebyshevDist(selUnit.r, selUnit.c, r, c);
     if(dist > weapon.range) { addLog(`Out of range! (need ≤${weapon.range})`); return; }
     
-    // No attacking in trade zones
     if(isTradeZone(selUnit.r, selUnit.c) || isTradeZone(r,c)) {
       addLog('No attacking in trade zones!'); return;
     }
     
-    // No attacking in castles (unless NML engaged)
-    // Rule: fight others in no mans land => attacks only allowed in NML or if attacker is in enemy castle
     if(!isInNoMansLand(selUnit.r, selUnit.c) && !isInNoMansLand(r,c)) {
-      // Both are in castles - only allow if in same enemy castle
       const attackerCastle = getCellType(selUnit.r,selUnit.c);
       const defenderCastle = getCellType(r,c);
       if(attackerCastle.startsWith('castle_') && defenderCastle.startsWith('castle_') &&
@@ -2025,7 +1768,6 @@ function onCellClick(r, c) {
       }
     }
     
-    // Surrendered: must take hostage
     if(targetUnit.surrendered) {
       G.pendingHostageTarget = {playerId:target.id, unitId:targetUnit.id};
       closeModal('modal-weapon-select');
@@ -2035,21 +1777,6 @@ function onCellClick(r, c) {
     }
     
     performAttack(selUnit, targetUnit, target, cp, weapon, r, c);
-    return;
-  }
-  
-  if(G.mode === 'collect') {
-    const selUnit = getSelectedUnitObj();
-    if(!selUnit) { G.mode=null; return; }
-    if(selUnit.r !== r || selUnit.c !== c) { addLog('Unit must be on the resource to collect it!'); return; }
-    const res = getResourceAt(r,c);
-    if(!res) { addLog('No resource here!'); return; }
-    cp.resources[res.type] = (cp.resources[res.type]||0) + 1;
-    G.resources = G.resources.filter(x=>!(x.r===r&&x.c===c));
-    cp.ap--;
-    addLog(`📦 Collected: ${RES_EMOJI[res.type]} ${res.type}`, 'log-craft');
-    G.mode = null;
-    finishAction();
     return;
   }
   
@@ -2070,7 +1797,6 @@ function onCellClick(r, c) {
     return;
   }
   
-  // Default: try to select own unit
   if(clickedUnit && clickedUnit.player.id === G.myId) {
     selectUnit(clickedUnit.player.id, clickedUnit.unit.id);
   } else {
@@ -2084,16 +1810,13 @@ function onCellClick(r, c) {
 function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc) {
   let dmg = weapon.dmg;
   
-  // Fire bonus
   if(atkPlayer.faction === 'red') dmg++;
   
-  // Bow bonus at max range
   if(weapon.id === 'bow') {
     const dist = chebyshevDist(attacker.r, attacker.c, tr, tc);
     if(dist === weapon.range) dmg++;
   }
   
-  // Equalizer special
   if(weapon.id === 'equalizer') {
     if(defender.hp > attacker.hp) {
       defender.hp = attacker.hp;
@@ -2103,9 +1826,7 @@ function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc)
     dmg = 0;
   }
   
-  // Grenade AoE
   if(weapon.id === 'grenade') {
-    // Hit adjacent cells
     for(let dr=-1; dr<=1; dr++) for(let dc=-1; dc<=1; dc++) {
       if(dr===0 && dc===0) continue;
       const ar=tr+dr, ac=tc+dc;
@@ -2118,7 +1839,6 @@ function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc)
     }
   }
   
-  // Pusher
   if(weapon.id === 'pusher') {
     const dr = Math.sign(tr - attacker.r);
     const dc = Math.sign(tc - attacker.c);
@@ -2130,7 +1850,6 @@ function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc)
     }
   }
   
-  // Spear: hit second unit in line
   if(weapon.id === 'spear') {
     const dr = Math.sign(tr - attacker.r);
     const dc = Math.sign(tc - attacker.c);
@@ -2144,7 +1863,6 @@ function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc)
     }
   }
   
-  // Apply main damage
   if(dmg > 0) {
     defender.hp = Math.max(0, defender.hp - dmg);
   }
@@ -2154,9 +1872,7 @@ function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc)
   
   addLog(`⚔ ${atkPlayer.name} attacks with ${weapon.name}! ${defender.id} takes ${dmg} dmg (${defender.hp} HP left)`, 'log-combat');
   
-  // Sword cleave
   if(weapon.id === 'sword' && defender.hp <= 0) {
-    // Find adjacent enemy
     for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++) {
       if(dr===0&&dc===0) continue;
       const adj = getUnitAt(tr+dr, tc+dc);
@@ -2168,7 +1884,6 @@ function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc)
     }
   }
   
-  // Remove dead units
   G.players.forEach(p => {
     p.units = p.units.filter(u => {
       if(u.hp <= 0) {
@@ -2196,7 +1911,6 @@ function confirmTakeHostage() {
   const targetUnit = targetPlayer?.units.find(u=>u.id===unitId);
   if(!targetUnit) { closeModal('modal-hostage-action'); return; }
   
-  // Move them to captor's prison
   const rooms = getCastleRooms(cp.faction);
   const prison = rooms.prison;
   const pr = Math.floor((prison.r1+prison.r2)/2);
@@ -2248,12 +1962,9 @@ function renderBoard() {
   
   const cp = currentPlayer();
   const selUnit = getSelectedUnitObj();
-  const selPlayer = getSelectedPlayer();
   
-  // Calculate highlights
   let moveHighlights = new Set();
   let attackHighlights = new Set();
-  let collectHighlights = new Set();
   
   if(isMyTurn() && selUnit && G.mode === 'move') {
     const maxMove = cp.faction === 'white' ? 4 : 3;
@@ -2276,11 +1987,6 @@ function renderBoard() {
         });
       });
     }
-  }
-  
-  if(isMyTurn() && selUnit && G.mode === 'collect') {
-    const res = getResourceAt(selUnit.r, selUnit.c);
-    if(res) collectHighlights.add(`${selUnit.r},${selUnit.c}`);
   }
   
   for(let r=0; r<BOARD_SIZE; r++) {
@@ -2306,12 +2012,10 @@ function renderBoard() {
       const key = `${r},${c}`;
       if(moveHighlights.has(key)) cell.classList.add('highlight-move');
       if(attackHighlights.has(key)) cell.classList.add('highlight-attack');
-      if(collectHighlights.has(key)) cell.classList.add('highlight-collect');
       if(isTradeZone(r,c)) cell.classList.add('trade-zone');
       
       cell.onclick = () => onCellClick(r,c);
       
-      // Resource token
       const res = getResourceAt(r,c);
       if(res) {
         const tok = document.createElement('div');
@@ -2322,7 +2026,6 @@ function renderBoard() {
         cell.appendChild(tok);
       }
       
-      // Units
       const unitHere = getUnitAt(r,c);
       if(unitHere) {
         const {player,unit} = unitHere;
@@ -2340,13 +2043,20 @@ function renderBoard() {
         
         cell.onclick = (e) => {
           e.stopPropagation();
-          // In attack mode, clicking an enemy triggers attack
-          if(G.mode === 'attack') { onCellClick(r,c); return; }
-          if(G.mode === 'hostage') { onCellClick(r,c); return; }
+
+          if (
+              G.mode === 'attack' ||
+              G.mode === 'hostage' ||
+              G.mode === 'move'
+          ) {
+              onCellClick(r,c);
+              return;
+          }
+
           if(player.id === G.myId && isMyTurn()) {
-            selectUnit(player.id, unit.id);
+              selectUnit(player.id, unit.id);
           } else {
-            onCellClick(r,c);
+              onCellClick(r,c);
           }
         };
       }
@@ -2355,14 +2065,11 @@ function renderBoard() {
     }
   }
   
-  // Add room labels
   addBoardLabels();
 }
 
 function addBoardLabels() {
   const board = document.getElementById('game-board');
-  const boardRect = {offsetLeft:0, offsetTop:0};
-  
   const labelData = [];
   G.players.forEach(p => {
     const z = CASTLE_ZONES[p.faction];
@@ -2393,7 +2100,6 @@ function updateUI() {
   const myP = G.players.find(p=>p.id===G.myId);
   if(!myP) return;
   
-  // Turn banner
   const banner = document.getElementById('turn-banner');
   if(isMyTurn()) {
     banner.textContent = 'YOUR TURN';
@@ -2403,7 +2109,6 @@ function updateUI() {
     banner.className = 'turn-banner enemy-turn';
   }
   
-  // AP display
   const apDisp = document.getElementById('ap-display');
   apDisp.innerHTML = '<span class="ap-label">AP</span>';
   for(let i=0;i<4;i++) {
@@ -2412,7 +2117,6 @@ function updateUI() {
     apDisp.appendChild(pip);
   }
   
-  // Players list
   const plist = document.getElementById('players-list');
   plist.innerHTML = G.players.map(p => `
     <div class="player-entry ${p.id===cp.id?'active-player':''}">
@@ -2421,7 +2125,6 @@ function updateUI() {
       <span class="p-soldiers">${p.units.length}🎲</span>
     </div>`).join('');
   
-  // Selected unit
   const selUnit = G.selectedUnit ? getSelectedUnitObj() : null;
   const selPanel = document.getElementById('selected-unit-panel');
   if(selUnit && G.selectedUnit.playerId === G.myId) {
@@ -2439,7 +2142,6 @@ function updateUI() {
     selPanel.style.display='none';
   }
   
-  // Action buttons
   const hasUnit = !!selUnit && G.selectedUnit?.playerId === G.myId;
   const myTurn = isMyTurn();
   const hasBandage = myP.inventory.find(x=>x.id==='bandage');
@@ -2455,7 +2157,6 @@ function updateUI() {
   document.getElementById('btn-hostage').disabled = !hasUnit || !myTurn || cp.ap<1;
   document.getElementById('btn-end-turn').disabled = !myTurn;
   
-  // Resources (show MY resources)
   const resDisplay = document.getElementById('resource-display');
   resDisplay.innerHTML = RESOURCES.map(r => `
     <div class="res-item">
@@ -2463,7 +2164,6 @@ function updateUI() {
       <span>${RES_EMOJI[r]} ${r}: <strong style="color:var(--gold-bright)">${myP.resources[r]||0}</strong></span>
     </div>`).join('');
   
-  // Inventory
   const invDisplay = document.getElementById('inventory-display');
   if(!myP.inventory.length) {
     invDisplay.innerHTML = '<div style="color:var(--parchment-dark);font-size:0.8rem;font-style:italic">No items</div>';
@@ -2505,13 +2205,6 @@ function doAITurn() {
   addLog(`🤖 AI is thinking...`, 'log-system');
   
   let apLeft = cp.ap;
-  const actions = [];
-  
-  // Simple balanced AI: 
-  // 1. If can attack, attack
-  // 2. If low resources, collect
-  // 3. Move toward no mans land or enemy
-  // 4. Craft if has resources
   
   function runAI() {
     if(apLeft <= 0) { endTurn(); return; }
@@ -2521,7 +2214,6 @@ function doAITurn() {
     
     let acted = false;
     
-    // Try to collect resources
     for(const unit of cp.units) {
       if(apLeft < 1) break;
       const res = getResourceAt(unit.r, unit.c);
@@ -2536,7 +2228,6 @@ function doAITurn() {
       }
     }
     
-    // Try to attack
     if(!acted) {
       for(const unit of cp.units) {
         if(apLeft < 1) break;
@@ -2571,7 +2262,6 @@ function doAITurn() {
       }
     }
     
-    // Try to craft if in right room
     if(!acted) {
       for(const unit of cp.units) {
         if(apLeft < 1) break;
@@ -2589,12 +2279,9 @@ function doAITurn() {
       }
     }
     
-    // Move toward resources or enemies
     if(!acted) {
       const unit = cp.units[0];
       if(unit && apLeft >= 1) {
-        const maxMove = 3;
-        // Find nearest resource or enemy
         let bestTarget = null;
         let bestDist = Infinity;
         
@@ -2667,7 +2354,6 @@ function getSelectedFaction() {
   return btn ? btn.dataset.faction : null;
 }
 
-// Faction selection
 document.querySelectorAll('.faction-btn').forEach(btn => {
   btn.onclick = () => {
     document.querySelectorAll('.faction-btn').forEach(b=>b.classList.remove('selected'));
