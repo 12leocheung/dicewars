@@ -1155,6 +1155,12 @@ function handlePeerData(data, fromId) {
       break;
     case 'game_state':
       applyGameState(data.state);
+      // Host relays the update to all other clients
+      if(isHost) {
+        Object.values(connections).forEach(c => {
+          if(c.peer !== fromId) { try { c.send(data); } catch(e){} }
+        });
+      }
       break;
     case 'faction_taken':
       alert('That element has already been chosen. Please select another one.');
@@ -1401,7 +1407,12 @@ function endTurn() {
   checkVictory();
   
   if(!G.isAIGame) {
-    broadcastToAll({ type:'game_state', state: serializeState() });
+    const msg = { type:'game_state', state: serializeState() };
+    if(isHost) {
+      broadcastToAll(msg);
+    } else {
+      sendToHost(msg);
+    }
   }
   
   renderBoard();
@@ -1943,7 +1954,12 @@ function openWeaponSelectModal(weapons) {
 
 function finishAction() {
   if(!G.isAIGame) {
-    broadcastToAll({ type:'game_state', state: serializeState() });
+    const msg = { type:'game_state', state: serializeState() };
+    if(isHost) {
+      broadcastToAll(msg);
+    } else {
+      sendToHost(msg);
+    }
   }
   checkVictory();
   renderBoard();
