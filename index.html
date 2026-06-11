@@ -327,10 +327,25 @@
   .board-cell.highlight-move { background: rgba(80,200,80,0.35) !important; cursor: pointer; }
   .board-cell.highlight-attack { background: rgba(220,50,50,0.4) !important; cursor: pointer; }
 
-  .board-cell.castle-border-top { border-top: 3px solid var(--border-heavy); }
-  .board-cell.castle-border-bottom { border-bottom: 3px solid var(--border-heavy); }
-  .board-cell.castle-border-left { border-left: 3px solid var(--border-heavy); }
-  .board-cell.castle-border-right { border-right: 3px solid var(--border-heavy); }
+  /* New Game Elements Rendering */
+  .mist-layer {
+    position: absolute; inset: 0;
+    background: rgba(50, 255, 100, 0.25);
+    z-index: 1; pointer-events: none;
+    border-radius: 4px;
+  }
+  .mine-token {
+    position: absolute; width: 10px; height: 10px;
+    border-radius: 50%; background: #c0392b;
+    border: 2px solid #2c1a0e; bottom: 4px; left: 4px;
+    z-index: 1; box-shadow: 0 0 5px #c0392b;
+    animation: mine-pulse 2s infinite;
+  }
+  @keyframes mine-pulse {
+    0% { transform: scale(0.9); opacity: 0.8; }
+    50% { transform: scale(1.2); opacity: 1; }
+    100% { transform: scale(0.9); opacity: 0.8; }
+  }
 
   /* DICE (units) */
   .dice-unit {
@@ -354,6 +369,15 @@
   .dice-unit.exhausted { opacity: 0.5; }
   .dice-unit.prisoner { z-index: 3; }
 
+  .dice-unit.status-smoke { outline: 2px dashed #e0e0e0; outline-offset: 1px; opacity: 0.85; }
+  .status-icon {
+    position: absolute; top: -5px; right: -5px;
+    font-size: 11px; background: rgba(0,0,0,0.7);
+    border-radius: 50%; width: 16px; height: 16px;
+    display: flex; align-items: center; justify-content: center;
+    color: yellow; z-index: 5;
+  }
+
   .dice-red { background: linear-gradient(135deg, #e74c3c, #922b21); color: #fff; }
   .dice-blue { background: linear-gradient(135deg, #2980b9, #1a5276); color: #fff; }
   .dice-green { background: linear-gradient(135deg, #27ae60, #1e8449); color: #fff; }
@@ -366,7 +390,7 @@
     border-radius: 50%;
     border: 1.5px solid rgba(0,0,0,0.4);
     bottom: 2px; right: 2px;
-    z-index: 1;
+    z-index: 2;
     font-size: 9px;
     display: flex;
     align-items: center;
@@ -387,8 +411,8 @@
     font-weight: 700;
     letter-spacing: 0.05em;
     pointer-events: none;
+    z-index: 3;
     text-transform: uppercase;
-    z-index: 0;
   }
 
   /* ===== PANELS ===== */
@@ -827,7 +851,7 @@
       <button class="action-btn" id="btn-heal" onclick="doHeal()">💊 Heal in Hospital <span class="ap-cost">1 AP</span></button>
       <button class="action-btn" id="btn-craft" onclick="openCraftModal()">🔨 Craft <span class="ap-cost">1 AP</span></button>
       <button class="action-btn" id="btn-new-soldier" onclick="doNewSoldier()">➕ New Soldier <span class="ap-cost">2 AP</span></button>
-      <button class="action-btn" id="btn-bandage" onclick="doBandage()">🩹 Use Bandage <span class="ap-cost">1 AP</span></button>
+      <button class="action-btn" id="btn-inventory" onclick="openItemUseModal()">🎒 Use Item</button>
       <button class="action-btn" id="btn-surrender" onclick="doSurrender()">🏳 Surrender (0 AP)</button>
       <button class="action-btn" id="btn-hostage" onclick="activateHostageMode()">⛓ Take Hostage <span class="ap-cost">1 AP</span></button>
     </div>
@@ -882,6 +906,14 @@
     <div class="modal-title">⚔ Select Weapon to Attack With</div>
     <button class="modal-close" onclick="closeModal('modal-weapon-select')">×</button>
     <div id="weapon-select-list" class="recipe-list"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-item-use">
+  <div class="modal-box">
+    <div class="modal-title">🎒 Use Item</div>
+    <button class="modal-close" onclick="closeModal('modal-item-use')">×</button>
+    <div id="item-use-list" class="recipe-list"></div>
   </div>
 </div>
 
@@ -1015,18 +1047,19 @@ function rbSetTab(tab) {
   const list = document.getElementById('rb-list');
   const filtered = tab==='all' ? RECIPES : RECIPES.filter(r=>r.room===tab);
   list.innerHTML = filtered.map(recipe => {
-    const dmgStr = recipe.dmg > 0 ? recipe.dmg : '—';
-    const rngStr = recipe.range > 0 ? recipe.range : '—';
+    const dmgStr = recipe.isItem ? '—' : (recipe.dmg >= 0 ? recipe.dmg : '—');
+    const rngStr = recipe.isItem ? '—' : (recipe.range > 0 ? recipe.range : '—');
     const costHtml = Object.entries(recipe.cost).map(([res,n]) =>
       `<span class="rb-cost-item">${RES_EMOJI[res]} ${n} ${res}</span>`
     ).join('');
     return `
       <div class="rb-card">
-        <div class="rb-card-name">${recipe.name}</div>
+        <div class="rb-card-name">${recipe.name} ${recipe.isItem ? '<span style="font-size:0.7rem;opacity:0.7">(Item)</span>' : ''}</div>
         <div class="rb-card-room rb-room-${recipe.room}">${recipe.room === 'armoury' ? '⚔ Armoury' : '🧪 Lab'}</div>
         <div class="rb-stats">
+          ${recipe.isItem ? `<div class="rb-stat">⚡ AP Cost: <strong>${recipe.apCost}</strong></div>` : `
           <div class="rb-stat">⚔ DMG <strong>${dmgStr}</strong></div>
-          <div class="rb-stat">🎯 RNG <strong>${rngStr}</strong></div>
+          <div class="rb-stat">🎯 RNG <strong>${rngStr}</strong></div>`}
         </div>
         <div class="rb-ability">✦ ${recipe.ability}</div>
         <div class="rb-cost"><span style="opacity:0.6;margin-right:2px">Cost:</span>${costHtml}</div>
@@ -1054,14 +1087,22 @@ const RES_COLORS = { wood:'#8B4513', metal:'#708090', chemicals:'#9932CC', herbs
 const RES_EMOJI  = { wood:'🪵', metal:'⚙', chemicals:'🧪', herbs:'🌿', energy:'⚡' };
 
 const RECIPES = [
-  { id:'sword',      name:'Sword',      dmg:2, range:1, cost:{wood:2,metal:1},                   room:'armoury', lab:false, ability:'If this attack defeats an enemy, deal 1 dmg to an adjacent enemy.' },
-  { id:'bow',        name:'Bow',        dmg:1, range:5, cost:{wood:3,herbs:1},                    room:'armoury', lab:false, ability:'At max range (5), deals +1 dmg.' },
-  { id:'gun',        name:'Gun',        dmg:2, range:6, cost:{wood:3,metal:1,herbs:1},             room:'armoury', lab:false, ability:'Cannot be dodged or mitigated.' },
-  { id:'spear',      name:'Spear',      dmg:2, range:2, cost:{wood:3,metal:2},                    room:'armoury', lab:false, ability:'Can attack two enemies in a straight line.' },
-  { id:'grenade',    name:'Grenade',    dmg:2, range:4, cost:{metal:3,chemicals:2},               room:'lab',     lab:true,  ability:'AoE: 2 dmg to target, 1 to all adjacent (incl. friendlies).' },
-  { id:'equalizer',  name:'Equalizer',  dmg:0, range:3, cost:{metal:3,chemicals:2,energy:2,herbs:1}, room:'lab', lab:true,  ability:'If enemy HP > your HP, set enemy HP = your HP. Else -1.' },
-  { id:'pusher',     name:'Pusher',     dmg:1, range:5, cost:{metal:3,chemicals:2,energy:2},      room:'lab',     lab:true,  ability:'Pushes target 2 squares away. Cannot push through walls.' },
-  { id:'bandage',    name:'Bandage',    dmg:0, range:0, cost:{herbs:3},                           room:'armoury', lab:false, ability:'Use any time: heal 2 HP. Costs 1 AP.' },
+  // Weapons
+  { id:'sword',      name:'Sword',      isItem:false, dmg:2, range:1, cost:{wood:1,metal:2},                    room:'armoury', ability:'If this attack defeats an enemy, immediately deal 1 damage to an additional adjacent enemy.' },
+  { id:'bow',        name:'Bow',        isItem:false, dmg:1, range:5, cost:{wood:3,herbs:1},                    room:'armoury', ability:'If attacking an enemy at exactly maximum range (5), this attack deals +1 damage.' },
+  { id:'gun',        name:'Gun',        isItem:false, dmg:2, range:5, cost:{metal:3,chemicals:2,wood:1},        room:'armoury', ability:'This weapon cannot be dodged, blocked, or mitigated by any character abilities.' },
+  { id:'spear',      name:'Spear',      isItem:false, dmg:2, range:2, cost:{wood:3,metal:2},                    room:'armoury', ability:'Can attack two enemies at once if they are standing in a straight line within your range.' },
+  { id:'grenade',    name:'Grenade',    isItem:false, dmg:2, range:4, cost:{metal:3,chemicals:2},               room:'lab',     ability:'Deals 2 damage to the target square, and 1 damage to all immediately adjacent squares.' },
+  { id:'equalizer',  name:'Equalizer',  isItem:false, dmg:0, range:3, cost:{metal:3,chemicals:2,energy:2,herbs:1}, room:'lab',  ability:'When attacking, if the enemy has more health than you, reduce their health to your health.' },
+  { id:'pusher',     name:'Pusher',     isItem:false, dmg:1, range:5, cost:{metal:3,chemicals:2,energy:2},      room:'lab',     ability:'Upon hitting the target, they are immediately pushed 2 squares directly away from the attacker.' },
+  { id:'flashbang',  name:'Flashbang',  isItem:false, dmg:0, range:4, cost:{chemicals:2,energy:1,metal:1},      room:'lab',     ability:'Target a 3x3 area. Any enemy caught cannot make ranged attacks (>2 range) on their next turn.' },
+
+  // Items
+  { id:'bandage',    name:'Bandage',    isItem:true, apCost:1, cost:{herbs:3},                           room:'lab', ability:'Heal 2 HP at any time.' },
+  { id:'smoke_grenade',name:'Smoke Grenade',isItem:true, apCost:0, cost:{chemicals:2,herbs:1,energy:1},  room:'lab', ability:'Play anytime. Next targeted attack is dodged, and you immediately teleport to a free adjacent square.' },
+  { id:'stim_shot',  name:'Stim Shot',  isItem:true, apCost:0, cost:{chemicals:3,herbs:2,energy:1},      room:'lab', ability:'Gain an extra 2 AP this turn.' },
+  { id:'prox_mine',  name:'Prox. Mine', isItem:true, apCost:1, cost:{metal:3,chemicals:3},               room:'lab', ability:'Place under player. When any unit enters a 2-square radius, deals 3 damage to everyone in radius.' },
+  { id:'healing_mist',name:'Heal Mist', isItem:true, apCost:1, cost:{chemicals:3,herbs:2},               room:'lab', ability:'Place mist. Anyone (friend or foe) within 1 sq is healed 2HP at the start of the round. Lasts 3 rounds.' },
 ];
 
 const BOARD_SIZE = 16;
@@ -1112,8 +1153,6 @@ function getCastleRooms(faction) {
   }
 }
 
-// trade zones are handled inline in isTradeZone()
-
 // =====================================================================
 // STATE
 // =====================================================================
@@ -1126,6 +1165,8 @@ let G = {
   round: 1,
   board: [],      // 16x16 array of cell data
   resources: [],  // [{r,c,type}]
+  mines: [],      // [{r,c,ownerId}]
+  mists: [],      // [{r,c,turnsLeft}]
   selectedUnit: null, // {playerId, unitId}
   mode: null,     // null | 'move' | 'attack' | 'hostage'
   pendingHostageTarget: null,
@@ -1188,7 +1229,6 @@ function showHostOptionsNew() {
     });
     peer.on('error', e => {
       if(e.type === 'unavailable-id') {
-        // retry with new code
         peer.destroy();
         showHostOptionsNew();
       }
@@ -1296,7 +1336,6 @@ function handlePeerData(data, fromId) {
       break;
     case 'game_state':
       applyGameState(data.state);
-      // Host relays the update to all other clients
       if(isHost) {
         Object.values(connections).forEach(c => {
           if(c.peer !== fromId) { try { c.send(data); } catch(e){} }
@@ -1387,12 +1426,16 @@ function initGame(players) {
       prisoner: false,
       prisonerId: null,
       surrendered: false,
+      smoke: false,
+      flashbanged: 0
     }));
   });
 
   G.turnIndex = 0;
   G.round = 1;
   G.resources = [];
+  G.mines = [];
+  G.mists = [];
   G.surrenderedUnits = new Set();
   
   spawnResources();
@@ -1430,6 +1473,8 @@ function serializeState() {
     turnIndex: G.turnIndex,
     round: G.round,
     resources: G.resources,
+    mines: G.mines,
+    mists: G.mists,
     surrenderedUnits: [...G.surrenderedUnits],
   };
 }
@@ -1443,6 +1488,8 @@ function applyGameState(state) {
   G.turnIndex = state.turnIndex;
   G.round = state.round;
   G.resources = state.resources;
+  G.mines = state.mines || [];
+  G.mists = state.mists || [];
   G.surrenderedUnits = new Set(state.surrenderedUnits || []);
   G.selectedUnit = null;
   G.mode = null;
@@ -1474,7 +1521,7 @@ function getRoomAt(r, c) {
 }
 
 function isTradeZone(r, c) {
-  const B = BOARD_SIZE - 1; // 15
+  const B = BOARD_SIZE - 1;
   return (r <= 3 && c <= 3) ||           // top-left
          (r <= 3 && c >= B-3) ||          // top-right
          (r >= B-3 && c <= 3) ||          // bottom-left
@@ -1528,6 +1575,11 @@ function endTurn(fromAI) {
   const cp = currentPlayer();
   cp.attackedThisTurn = [];
   
+  // Decrease flashbanged status for the player whose turn ends
+  cp.units.forEach(u => {
+    if(u.flashbanged > 0) u.flashbanged--;
+  });
+
   checkPrisonEscapes();
   
   let next = (G.turnIndex + 1) % G.players.length;
@@ -1538,9 +1590,11 @@ function endTurn(fromAI) {
   }
   G.turnIndex = next;
   
+  // Start of new round
   if(G.turnIndex === 0 || G.turnIndex < G.players.indexOf(cp)) {
     G.round++;
     spawnResources();
+    processHealingMists();
     addLog(`--- Round ${G.round} begins ---`, 'log-system');
   }
   
@@ -1568,6 +1622,58 @@ function endTurn(fromAI) {
   }
 }
 
+function processHealingMists() {
+  G.mists.forEach(mist => {
+    let healedSomeone = false;
+    G.players.forEach(p => {
+      p.units.forEach(u => {
+        if(chebyshevDist(u.r, u.c, mist.r, mist.c) <= 1) {
+          u.hp = Math.min(u.maxHp, u.hp + 2);
+          healedSomeone = true;
+        }
+      });
+    });
+    mist.turnsLeft--;
+    if(healedSomeone) addLog(`🌿 Healing Mist healed units at (${mist.r},${mist.c})`, 'log-craft');
+  });
+  G.mists = G.mists.filter(m => m.turnsLeft > 0);
+}
+
+function checkMines() {
+  let triggeredMines = [];
+  for(let i = G.mines.length - 1; i >= 0; i--) {
+    const m = G.mines[i];
+    let triggered = false;
+    for(let p of G.players) {
+      for(let u of p.units) {
+        if(chebyshevDist(u.r, u.c, m.r, m.c) <= 2) {
+          triggered = true; break;
+        }
+      }
+      if(triggered) break;
+    }
+    if(triggered) {
+      triggeredMines.push(m);
+      G.mines.splice(i, 1);
+    }
+  }
+
+  if(triggeredMines.length > 0) {
+    triggeredMines.forEach(m => {
+      addLog(`💣 Proximity Mine exploded at (${m.r},${m.c})!`, 'log-combat');
+      G.players.forEach(p => {
+        p.units.forEach(u => {
+          if(chebyshevDist(u.r, u.c, m.r, m.c) <= 2) {
+            u.hp = Math.max(0, u.hp - 3);
+            addLog(`💥 ${u.id} took 3 damage from mine!`, 'log-combat');
+          }
+        });
+      });
+    });
+    checkDeaths();
+  }
+}
+
 function checkPrisonEscapes() {
   G.players.forEach(owner => {
     const myRooms = getCastleRooms(owner.faction);
@@ -1592,6 +1698,22 @@ function checkPrisonEscapes() {
           }
         });
       });
+    }
+  });
+}
+
+function checkDeaths() {
+  G.players.forEach(p => {
+    p.units = p.units.filter(u => {
+      if(u.hp <= 0) {
+        addLog(`💀 ${u.id} is defeated!`, 'log-combat');
+        return false;
+      }
+      return true;
+    });
+    if(p.units.length === 0) {
+      p.alive = false;
+      addLog(`🏴 ${p.name} has been eliminated!`, 'log-system');
     }
   });
 }
@@ -1672,9 +1794,18 @@ function activateMoveMode() {
 function activateAttackMode() {
   if(!isMyTurn() || !G.selectedUnit) return;
   const cp = currentPlayer();
+  const unit = getSelectedUnitObj();
   if(cp.ap < 1) { addLog('Not enough AP!'); return; }
   
-  const weapons = getWeaponsForAttack(cp);
+  let weapons = getWeaponsForAttack(cp);
+  
+  if (unit.flashbanged > 0) {
+    weapons = weapons.filter(w => w.range <= 2);
+    if (!weapons.length) {
+      addLog('Unit is flashbanged and has no short-range weapons!'); return;
+    }
+  }
+
   if(!weapons.length) { addLog('No weapons! Craft one first.'); return; }
   if(weapons.length === 1) {
     G.selectedWeapon = weapons[0].id;
@@ -1687,7 +1818,7 @@ function activateAttackMode() {
 
 function getWeaponsForAttack(player) {
   const ids = (player.inventory||[]).map(x=>x.id);
-  return RECIPES.filter(r=>ids.includes(r.id) && r.dmg>0 && r.id!=='bandage');
+  return RECIPES.filter(r => ids.includes(r.id) && !r.isItem && r.dmg !== undefined);
 }
 
 function activateHostageMode() {
@@ -1712,7 +1843,6 @@ function doCollect() {
     return;
   }
   
-  // Collect the resource
   cp.resources[res.type] = (cp.resources[res.type]||0) + 1;
   G.resources = G.resources.filter(x => !(x.r === selUnit.r && x.c === selUnit.c));
   cp.ap--;
@@ -1744,21 +1874,72 @@ function doHeal() {
   finishAction();
 }
 
-function doBandage() {
+function openItemUseModal() {
+  if(!isMyTurn() || !G.selectedUnit) return;
+  const cp = currentPlayer();
+
+  const list = document.getElementById('item-use-list');
+  list.innerHTML = '';
+
+  const items = cp.inventory.map(inv => {
+    return { count: inv.count, recipe: RECIPES.find(r => r.id === inv.id && r.isItem) };
+  }).filter(x => x.recipe);
+
+  if(items.length === 0) {
+    list.innerHTML = '<p style="color:var(--ink-light);font-size:0.85rem">No usable items in inventory.</p>';
+  } else {
+    items.forEach(it => {
+      const r = it.recipe;
+      const canAfford = cp.ap >= r.apCost;
+      const el = document.createElement('div');
+      el.className = 'recipe-item' + (canAfford ? '' : ' cant-afford');
+      el.innerHTML = `
+        <div class="recipe-name">${r.name} <span style="float:right;color:var(--gold-bright)">x${it.count}</span></div>
+        <div class="recipe-stats">Cost: ${r.apCost} AP</div>
+        <div class="recipe-ability">${r.ability}</div>
+      `;
+      if(canAfford) {
+        el.onclick = () => { doUseItem(r.id); closeModal('modal-item-use'); };
+      }
+      list.appendChild(el);
+    });
+  }
+  openModal('modal-item-use');
+}
+
+function doUseItem(itemId) {
   if(!isMyTurn() || !G.selectedUnit) return;
   const cp = currentPlayer();
   const unit = getSelectedUnitObj();
-  if(!unit) return;
-  if(cp.ap < 1) return;
-  
-  const hasBandage = cp.inventory.find(x=>x.id==='bandage');
-  if(!hasBandage) { addLog('No bandages in inventory!'); return; }
-  
-  unit.hp = Math.min(unit.maxHp, unit.hp + 2);
-  hasBandage.count--;
-  if(hasBandage.count <= 0) cp.inventory = cp.inventory.filter(x=>x.id!=='bandage');
-  cp.ap--;
-  addLog(`🩹 Bandage used! +2 HP (${unit.hp}/${unit.maxHp})`, 'log-craft');
+  const recipe = RECIPES.find(r => r.id === itemId);
+  if(cp.ap < recipe.apCost) return;
+
+  const invItem = cp.inventory.find(x => x.id === itemId);
+  if(!invItem || invItem.count <= 0) return;
+
+  cp.ap -= recipe.apCost;
+  invItem.count--;
+  if(invItem.count <= 0) {
+    cp.inventory = cp.inventory.filter(x => x.id !== itemId);
+  }
+
+  if(itemId === 'bandage') {
+    unit.hp = Math.min(unit.maxHp, unit.hp + 2);
+    addLog(`🩹 ${unit.id} used Bandage (+2 HP)`, 'log-craft');
+  } else if(itemId === 'stim_shot') {
+    cp.ap += 2;
+    addLog(`💉 ${unit.id} used Stim Shot (+2 AP)`, 'log-craft');
+  } else if(itemId === 'smoke_grenade') {
+    unit.smoke = true;
+    addLog(`💨 ${unit.id} popped a Smoke Grenade (Buff applied)`, 'log-craft');
+  } else if(itemId === 'prox_mine') {
+    G.mines.push({ r: unit.r, c: unit.c, ownerId: cp.id });
+    addLog(`💣 ${unit.id} planted a Proximity Mine`, 'log-craft');
+  } else if(itemId === 'healing_mist') {
+    G.mists.push({ r: unit.r, c: unit.c, turnsLeft: 3 });
+    addLog(`🌿 ${unit.id} deployed Healing Mist`, 'log-craft');
+  }
+
   finishAction();
 }
 
@@ -1786,7 +1967,7 @@ function doNewSoldier() {
   RESOURCES.forEach(r => cp.resources[r]--);
   
   const newId = cp.faction + '_' + Date.now();
-  cp.units.push({ id:newId, r:pos[0].r, c:pos[0].c, hp:6, maxHp:6, prisoner:false, prisonerId:null, surrendered:false });
+  cp.units.push({ id:newId, r:pos[0].r, c:pos[0].c, hp:6, maxHp:6, prisoner:false, prisonerId:null, surrendered:false, smoke:false, flashbanged:0 });
   cp.ap -= 2;
   addLog(`➕ New soldier created!`, 'log-craft');
   finishAction();
@@ -1824,12 +2005,13 @@ function openCraftModal() {
     
     const canAfford = canCraft(cp, recipe);
     const costStr = Object.entries(recipe.cost).map(([r,n])=>`${n} ${RES_EMOJI[r]}${r}`).join(', ');
+    const statsStr = recipe.isItem ? `AP Cost: ${recipe.apCost}` : `DMG: ${recipe.dmg||'0'} · RNG: ${recipe.range||'—'}`;
     
     const el = document.createElement('div');
     el.className = 'recipe-item' + (canAfford ? '' : ' cant-afford');
     el.innerHTML = `
-      <div class="recipe-name">${recipe.name}</div>
-      <div class="recipe-stats">DMG: ${recipe.dmg||'N/A'} · RNG: ${recipe.range||'—'}</div>
+      <div class="recipe-name">${recipe.name} ${recipe.isItem ? '<span style="font-size:0.7rem">(Item)</span>' : ''}</div>
+      <div class="recipe-stats">${statsStr}</div>
       <div class="recipe-ability">${recipe.ability}</div>
       <div class="recipe-cost">Cost: ${costStr}</div>
     `;
@@ -1894,6 +2076,8 @@ function onCellClick(r, c) {
     selUnit.c = c;
     cp.ap--;
     addLog(`🚶 Moved to (${r},${c})`, 'log-move');
+    
+    checkMines();
     
     G.mode = null;
     finishAction();
@@ -1971,8 +2155,37 @@ function onCellClick(r, c) {
 function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc, skipFinish) {
   let dmg = weapon.dmg;
   
+  // SMOKE GRENADE NEGATION (Gun bypasses it)
+  if (defender.smoke && weapon.id !== 'gun') {
+    defender.smoke = false;
+    addLog(`💨 ${defender.id} dodged the attack with a Smoke Grenade!`, 'log-combat');
+    
+    // Teleport
+    const openCells = [];
+    for(let dr=-1; dr<=1; dr++) for(let dc=-1; dc<=1; dc++) {
+      let r2 = defender.r+dr, c2 = defender.c+dc;
+      if(r2>=0 && r2<16 && c2>=0 && c2<16 && !isOccupied(r2, c2)) {
+         openCells.push({r:r2, c:c2});
+      }
+    }
+    if(openCells.length > 0) {
+      let chosen = openCells[Math.floor(Math.random()*openCells.length)];
+      defender.r = chosen.r;
+      defender.c = chosen.c;
+    }
+    
+    atkPlayer.attackedThisTurn.push(defender.id);
+    atkPlayer.ap--;
+    checkMines();
+    G.mode = null; G.selectedWeapon = null;
+    if(!skipFinish) finishAction();
+    return;
+  }
+
+  // Faction bonus
   if(atkPlayer.faction === 'red') dmg++;
   
+  // Specific Weapon logic
   if(weapon.id === 'bow') {
     const dist = chebyshevDist(attacker.r, attacker.c, tr, tc);
     if(dist === weapon.range) dmg++;
@@ -1981,8 +2194,7 @@ function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc,
   if(weapon.id === 'equalizer') {
     if(defender.hp > attacker.hp) {
       defender.hp = attacker.hp;
-    } else {
-      defender.hp = Math.max(0, defender.hp - 1);
+      addLog(`⚖ Equalizer! ${defender.id} health matched to ${attacker.hp}.`, 'log-combat');
     }
     dmg = 0;
   }
@@ -1998,6 +2210,19 @@ function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc,
         addLog(`💥 Splash: ${adj.unit.id} -1 HP`, 'log-combat');
       }
     }
+  }
+
+  if(weapon.id === 'flashbang') {
+    for(let dr=-1; dr<=1; dr++) for(let dc=-1; dc<=1; dc++) {
+      const ar=tr+dr, ac=tc+dc;
+      if(ar<0||ar>=16||ac<0||ac>=16) continue;
+      const adj = getUnitAt(ar,ac);
+      if(adj && adj.player.id !== atkPlayer.id) {
+        adj.unit.flashbanged = 2; // Lasts until their next turn ends
+        addLog(`⚡ ${adj.unit.id} is flashbanged!`, 'log-combat');
+      }
+    }
+    dmg = 0;
   }
   
   if(weapon.id === 'pusher') {
@@ -2019,7 +2244,7 @@ function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc,
       const second = getUnitAt(r2,c2);
       if(second && second.player.id !== atkPlayer.id) {
         second.unit.hp = Math.max(0, second.unit.hp - dmg);
-        addLog(`🗡 Spear cleave! ${second.unit.id} -${dmg} HP`, 'log-combat');
+        addLog(`🗡 Spear pierce! ${second.unit.id} -${dmg} HP`, 'log-combat');
       }
     }
   }
@@ -2040,24 +2265,16 @@ function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc,
       if(adj && adj.player.id !== atkPlayer.id && adj.unit.hp > 0) {
         adj.unit.hp = Math.max(0, adj.unit.hp-1);
         addLog(`🗡 Sword cleave: ${adj.unit.id} -1 HP`, 'log-combat');
-        break;
+        break; // Only one additional adjacent enemy
       }
     }
   }
   
-  G.players.forEach(p => {
-    p.units = p.units.filter(u => {
-      if(u.hp <= 0) {
-        addLog(`💀 ${u.id} is defeated!`, 'log-combat');
-        return false;
-      }
-      return true;
-    });
-    if(p.units.length === 0) {
-      p.alive = false;
-      addLog(`🏴 ${p.name} has been eliminated!`, 'log-system');
-    }
-  });
+  checkDeaths();
+
+  if(weapon.id === 'pusher') {
+    checkMines();
+  }
   
   G.mode = null;
   G.selectedWeapon = null;
@@ -2131,7 +2348,14 @@ function renderBoard() {
   
   let moveHighlights = new Set();
   let attackHighlights = new Set();
+  const mistCells = new Set();
   
+  G.mists.forEach(m => {
+    for(let dr=-1; dr<=1; dr++) for(let dc=-1; dc<=1; dc++) {
+       mistCells.add(`${m.r+dr},${m.c+dc}`);
+    }
+  });
+
   if(isMyTurn() && selUnit && G.mode === 'move') {
     const maxMove = cp.faction === 'white' ? 4 : 3;
     for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++) {
@@ -2180,6 +2404,12 @@ function renderBoard() {
       if(attackHighlights.has(key)) cell.classList.add('highlight-attack');
       if(isTradeZone(r,c)) cell.classList.add('trade-zone');
       
+      if(mistCells.has(key)) {
+        let mistLayer = document.createElement('div');
+        mistLayer.className = 'mist-layer';
+        cell.appendChild(mistLayer);
+      }
+
       cell.onclick = () => onCellClick(r,c);
       
       const res = getResourceAt(r,c);
@@ -2191,6 +2421,13 @@ function renderBoard() {
         tok.style.width='16px'; tok.style.height='16px';
         cell.appendChild(tok);
       }
+
+      const mineHere = G.mines.find(m => m.r === r && m.c === c);
+      if(mineHere) {
+        let mineToken = document.createElement('div');
+        mineToken.className = 'mine-token';
+        cell.appendChild(mineToken);
+      }
       
       const unitHere = getUnitAt(r,c);
       if(unitHere) {
@@ -2199,8 +2436,17 @@ function renderBoard() {
         die.className = `dice-unit dice-${player.faction}`;
         if(G.selectedUnit && G.selectedUnit.unitId === unit.id) die.classList.add('selected');
         if(unit.prisoner) die.classList.add('prisoner');
+        if(unit.smoke) die.classList.add('status-smoke');
         die.textContent = unit.hp;
         die.title = `${player.name}: ${unit.id} (${unit.hp}HP)`;
+
+        if(unit.flashbanged > 0) {
+          const fbIcon = document.createElement('div');
+          fbIcon.className = 'status-icon';
+          fbIcon.textContent = '⚡';
+          die.appendChild(fbIcon);
+        }
+
         if(unit.surrendered && !unit.prisoner) {
           die.style.opacity='0.6';
           die.style.outline='2px dashed white';
@@ -2238,14 +2484,11 @@ function addBoardLabels() {
   const board = document.getElementById('game-board');
   const labelData = [];
   
-  // Iterate through all possible factions to label every castle and room on the map,
-  // regardless of how many players are actively playing.
   for (const faction in CASTLE_ZONES) {
     const z = CASTLE_ZONES[faction];
     const p = G.players.find(player => player.faction === faction);
     const castleName = p ? p.name : FACTIONS[faction].name + ' Castle';
     
-    // Label the castle itself at the center
     const cr = Math.floor((z.r1 + z.r2) / 2);
     const cc = Math.floor((z.c1 + z.c2) / 2);
     labelData.push({ 
@@ -2253,7 +2496,6 @@ function addBoardLabels() {
       opacity: 0.6, fontSize: '0.45rem', top: '1px', left: '1px' 
     });
     
-    // Label each specific room inside the castle (Hospital, Prison, Armoury, Lab)
     const rooms = getCastleRooms(faction);
     for (const [room, rZone] of Object.entries(rooms)) {
       labelData.push({ 
@@ -2324,6 +2566,8 @@ function updateUI() {
       <div class="stat-row"><span class="stat-label">Room</span><span class="stat-val">${roomTag}</span></div>
       ${selUnit.surrendered?'<div class="surrender-banner">🏳 SURRENDERED</div>':''}
       ${selUnit.prisoner?'<div class="surrender-banner">⛓ PRISONER</div>':''}
+      ${selUnit.smoke?'<div class="surrender-banner" style="background:#555">💨 SMOKE ACTIVE</div>':''}
+      ${selUnit.flashbanged > 0?'<div class="surrender-banner" style="background:#b8860b">⚡ FLASHBANGED</div>':''}
     `;
   } else {
     selPanel.style.display='none';
@@ -2331,7 +2575,7 @@ function updateUI() {
   
   const hasUnit = !!selUnit && G.selectedUnit?.playerId === G.myId;
   const myTurn = isMyTurn();
-  const hasBandage = myP.inventory.find(x=>x.id==='bandage');
+  const hasItems = myP.inventory.some(inv => RECIPES.find(r => r.id === inv.id && r.isItem));
   
   document.getElementById('btn-move').disabled = !hasUnit || !myTurn || cp.ap<1;
   document.getElementById('btn-attack').disabled = !hasUnit || !myTurn || cp.ap<1;
@@ -2339,7 +2583,7 @@ function updateUI() {
   document.getElementById('btn-heal').disabled = !hasUnit || !myTurn || cp.ap<1;
   document.getElementById('btn-craft').disabled = !hasUnit || !myTurn || cp.ap<1;
   document.getElementById('btn-new-soldier').disabled = !myTurn || cp.ap<2;
-  document.getElementById('btn-bandage').disabled = !hasUnit || !myTurn || !hasBandage || cp.ap<1;
+  document.getElementById('btn-inventory').disabled = !hasUnit || !myTurn || !hasItems;
   document.getElementById('btn-surrender').disabled = !hasUnit || !myTurn;
   document.getElementById('btn-hostage').disabled = !hasUnit || !myTurn || cp.ap<1;
   document.getElementById('btn-end-turn').disabled = !myTurn;
@@ -2358,9 +2602,10 @@ function updateUI() {
     invDisplay.innerHTML = myP.inventory.map(item => {
       const recipe = RECIPES.find(r=>r.id===item.id);
       if(!recipe) return '';
+      const stats = recipe.isItem ? `AP Cost: ${recipe.apCost}` : `DMG ${recipe.dmg||'0'} · RNG ${recipe.range||'—'}`;
       return `<div class="card-item">
         <div class="card-name">${recipe.name}<span class="card-count">×${item.count}</span></div>
-        <div class="card-stats">DMG ${recipe.dmg||'N/A'} · RNG ${recipe.range||'—'}</div>
+        <div class="card-stats">${stats}</div>
       </div>`;
     }).join('');
   }
@@ -2391,7 +2636,6 @@ function doAITurn() {
 
   addLog(`🤖 AI is thinking...`, 'log-system');
 
-  // Build a queue of actions to execute with delays
   const actions = [];
   aiPlanTurn(cp, actions);
 
@@ -2414,12 +2658,9 @@ function doAITurn() {
 }
 
 function aiMoveUnit(cp, unit, tr, tc) {
-  // Move unit one step toward (tr,tc), up to maxMove squares
   const maxMove = cp.faction === 'white' ? 4 : 3;
-  // Try to step directly toward target
   const dr = Math.sign(tr - unit.r);
   const dc = Math.sign(tc - unit.c);
-  // Try diagonal first, then cardinal directions
   const tries = [
     {r: unit.r+dr, c: unit.c+dc},
     {r: unit.r+dr, c: unit.c},
@@ -2435,16 +2676,15 @@ function aiMoveUnit(cp, unit, tr, tc) {
     unit.r = t.r;
     unit.c = t.c;
     cp.ap--;
+    checkMines();
     return true;
   }
   return false;
 }
 
 function aiPlanTurn(cp, actions) {
-  // Work with a simulated copy of AP
   let apSim = cp.ap;
 
-  // Helper: find nearest enemy unit to a given unit
   function nearestEnemy(unit) {
     let best = null, bestD = Infinity;
     G.players.filter(p=>p.id!==cp.id&&p.alive).forEach(p=>{
@@ -2456,7 +2696,6 @@ function aiPlanTurn(cp, actions) {
     return best;
   }
 
-  // Helper: find nearest resource to a unit
   function nearestResource(unit) {
     let best = null, bestD = Infinity;
     G.resources.forEach(res=>{
@@ -2466,31 +2705,26 @@ function aiPlanTurn(cp, actions) {
     return best;
   }
 
-  // Helper: find center of a room in AI's castle
   function roomCenter(roomName) {
     const rooms = getCastleRooms(cp.faction);
     const z = rooms[roomName];
     return {r: Math.floor((z.r1+z.r2)/2), c: Math.floor((z.c1+z.c2)/2)};
   }
 
-  // Decide what the AI needs most
-  const hasWeapon = getWeaponsForAttack(cp).length > 0;
+  const weaponsList = getWeaponsForAttack(cp);
+  const hasWeapon = weaponsList.length > 0;
   const totalRes = RESOURCES.reduce((s,r)=>(s+(cp.resources[r]||0)),0);
   const wantCraft = !hasWeapon && totalRes >= 3;
   const wantResources = !hasWeapon && totalRes < 3;
 
-  // For each unit, decide its role this turn
   for(let ui=0; ui<cp.units.length; ui++) {
     if(apSim <= 0) break;
     const unit = cp.units[ui];
     if(unit.prisoner) continue;
 
-    const weapons = getWeaponsForAttack(cp);
-
-    // 1. If unit is on a resource, collect it
     const resHere = getResourceAt(unit.r, unit.c);
     if(resHere && apSim >= 1) {
-      const u = unit; // capture
+      const u = unit;
       actions.push(() => {
         cp.resources[resHere.type] = (cp.resources[resHere.type]||0)+1;
         G.resources = G.resources.filter(x=>!(x.r===u.r&&x.c===u.c));
@@ -2501,10 +2735,12 @@ function aiPlanTurn(cp, actions) {
       continue;
     }
 
-    // 2. If has weapons and enemy in range, attack
-    if(weapons.length && apSim >= 1) {
+    let validWeapons = weaponsList;
+    if(unit.flashbanged > 0) validWeapons = validWeapons.filter(w => w.range <= 2);
+
+    if(validWeapons.length && apSim >= 1) {
       let attacked = false;
-      for(const weapon of weapons) {
+      for(const weapon of validWeapons) {
         let target = null, bestD = Infinity;
         G.players.filter(p=>p.id!==cp.id&&p.alive).forEach(p=>{
           p.units.forEach(u=>{
@@ -2529,10 +2765,9 @@ function aiPlanTurn(cp, actions) {
       if(attacked) continue;
     }
 
-    // 3. If in own castle room and can craft, craft a weapon
     const roomInfo = getRoomAt(unit.r, unit.c);
     if(roomInfo && roomInfo.faction === cp.faction && apSim >= 1) {
-      const craftable = RECIPES.filter(r => r.room===roomInfo.room && canCraft(cp,r) && r.id!=='bandage');
+      const craftable = RECIPES.filter(r => r.room===roomInfo.room && canCraft(cp,r) && r.dmg !== undefined && !r.isItem);
       if(craftable.length) {
         const recipe = craftable[0], u = unit;
         actions.push(() => {
@@ -2549,38 +2784,31 @@ function aiPlanTurn(cp, actions) {
       }
     }
 
-    // 4. Move toward a useful destination
     if(apSim >= 1) {
       let dest = null;
 
       if(!hasWeapon && !wantResources) {
-        // Has resources, head to armoury to craft
         dest = roomCenter('armoury');
-        // Check if enough resources for armoury recipe
-        const armRecipes = RECIPES.filter(r=>r.room==='armoury'&&!r.lab&&canCraft(cp,r));
+        const armRecipes = RECIPES.filter(r=>r.room==='armoury'&&!r.lab&&canCraft(cp,r)&&!r.isItem);
         if(!armRecipes.length) {
-          const labRecipes = RECIPES.filter(r=>r.room==='lab'&&canCraft(cp,r));
+          const labRecipes = RECIPES.filter(r=>r.room==='lab'&&canCraft(cp,r)&&!r.isItem);
           if(labRecipes.length) dest = roomCenter('lab');
         }
       } else if(wantResources) {
-        // Head toward nearest resource
         const nr = nearestResource(unit);
         if(nr) dest = {r:nr.res.r, c:nr.res.c};
       }
 
-      // If has weapons, aggressively move toward enemies
-      if(weapons.length) {
+      if(validWeapons.length) {
         const enemy = nearestEnemy(unit);
         if(enemy) {
-          const weapon = weapons[0];
-          // Move to just within weapon range
+          const weapon = validWeapons[0];
           if(enemy.dist > weapon.range) {
             dest = {r:enemy.unit.r, c:enemy.unit.c};
           }
         }
       }
 
-      // Fallback: if no goal, just find nearest enemy
       if(!dest) {
         const enemy = nearestEnemy(unit);
         if(enemy) dest = {r:enemy.unit.r, c:enemy.unit.c};
@@ -2588,7 +2816,6 @@ function aiPlanTurn(cp, actions) {
 
       if(dest) {
         const u = unit, d = dest;
-        // Only queue the move if not already there
         if(chebyshevDist(unit.r, unit.c, d.r, d.c) > 0) {
           actions.push(() => {
             aiMoveUnit(cp, u, d.r, d.c);
@@ -2600,7 +2827,6 @@ function aiPlanTurn(cp, actions) {
       }
     }
 
-    // 5. If in hospital and hurt, heal
     if(roomInfo && roomInfo.room==='hospital' && roomInfo.faction===cp.faction && unit.hp < unit.maxHp && apSim >= 1) {
       const u = unit;
       actions.push(() => {
@@ -2613,7 +2839,6 @@ function aiPlanTurn(cp, actions) {
     }
   }
 
-  // If still AP left and nothing done, at least move all idle units
   if(apSim > 0 && actions.length === 0) {
     actions.push(() => {
       addLog(`🤖 AI ends turn`, 'log-system');
