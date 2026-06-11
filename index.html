@@ -820,7 +820,7 @@
     </div>
 
     <div class="panel-section">
-      <div class="panel-title">Actions</div>
+      <div class="panel-title" style="display:flex;justify-content:space-between;align-items:center;">Actions <button onclick="openRecipeBook()" title="Recipe Book" style="background:linear-gradient(135deg,#4a2a8a,#2d1a5a);color:#fff;font-family:'Cinzel',serif;font-size:0.6rem;letter-spacing:0.08em;border:none;padding:3px 7px;border-radius:3px;cursor:pointer;white-space:nowrap;">📖 Recipes</button></div>
       <button class="action-btn" id="btn-move" onclick="activateMoveMode()">🚶 Move <span class="ap-cost">1 AP</span></button>
       <button class="action-btn" id="btn-attack" onclick="activateAttackMode()">⚔ Attack <span class="ap-cost">1 AP</span></button>
       <button class="action-btn" id="btn-collect" onclick="doCollect()">📦 Collect Resource <span class="ap-cost">1 AP</span></button>
@@ -893,6 +893,147 @@
     <button class="btn btn-secondary" onclick="confirmTakeHostage()">Take Hostage (1 AP)</button>
   </div>
 </div>
+
+<div class="modal-overlay" id="modal-recipe-book">
+  <div class="modal-box" style="width:min(600px,97vw);max-height:90vh;">
+    <div class="modal-title">📖 Recipe Book</div>
+    <button class="modal-close" onclick="closeModal('modal-recipe-book')">×</button>
+
+    <!-- Tab bar -->
+    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
+      <button class="rb-tab selected" data-tab="all"    onclick="rbSetTab('all')">All</button>
+      <button class="rb-tab"          data-tab="armoury" onclick="rbSetTab('armoury')">⚔ Armoury</button>
+      <button class="rb-tab"          data-tab="lab"     onclick="rbSetTab('lab')">🧪 Lab</button>
+    </div>
+
+    <div id="rb-list"></div>
+  </div>
+</div>
+
+<style>
+.rb-tab {
+  padding:5px 12px;
+  border:1px solid var(--parchment-dark);
+  border-radius:3px;
+  background:var(--parchment-mid);
+  cursor:pointer;
+  font-family:'Cinzel',serif;
+  font-size:0.72rem;
+  letter-spacing:0.06em;
+  color:var(--ink);
+  transition:all 0.12s;
+}
+.rb-tab.selected {
+  background:linear-gradient(135deg,#4a2a8a,#2d1a5a);
+  color:#fff;
+  border-color:#4a2a8a;
+}
+.rb-card {
+  background:var(--parchment-mid);
+  border:1px solid var(--parchment-dark);
+  border-radius:4px;
+  padding:12px 14px;
+  margin-bottom:10px;
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:6px 14px;
+  align-items:start;
+}
+.rb-card-name {
+  font-family:'Cinzel',serif;
+  font-size:0.95rem;
+  font-weight:700;
+  color:var(--ink);
+  grid-column:1/2;
+}
+.rb-card-room {
+  grid-column:2/3;
+  grid-row:1/3;
+  align-self:start;
+  padding:3px 8px;
+  border-radius:3px;
+  font-family:'Cinzel',serif;
+  font-size:0.65rem;
+  font-weight:700;
+  letter-spacing:0.06em;
+  color:#fff;
+  white-space:nowrap;
+}
+.rb-room-armoury { background:rgba(160,112,8,0.75); }
+.rb-room-lab     { background:rgba(153,50,204,0.75); }
+.rb-stats {
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  font-size:0.8rem;
+  color:var(--ink-light);
+  grid-column:1/2;
+}
+.rb-stat { display:flex; align-items:center; gap:3px; }
+.rb-stat strong { color:var(--ink); }
+.rb-ability {
+  font-size:0.78rem;
+  color:#4a2080;
+  font-style:italic;
+  grid-column:1/-1;
+  margin-top:2px;
+}
+.rb-cost {
+  grid-column:1/-1;
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+  margin-top:4px;
+  padding-top:6px;
+  border-top:1px solid var(--parchment-dark);
+  font-size:0.78rem;
+  color:var(--ink-light);
+  align-items:center;
+}
+.rb-cost-item {
+  display:inline-flex;
+  align-items:center;
+  gap:3px;
+  background:rgba(0,0,0,0.06);
+  border:1px solid var(--parchment-dark);
+  border-radius:3px;
+  padding:2px 7px;
+  font-size:0.76rem;
+  font-family:'Cinzel',serif;
+  color:var(--ink);
+}
+</style>
+
+<script>
+function openRecipeBook() {
+  rbSetTab('all');
+  openModal('modal-recipe-book');
+}
+
+function rbSetTab(tab) {
+  document.querySelectorAll('.rb-tab').forEach(b => b.classList.toggle('selected', b.dataset.tab===tab));
+  const list = document.getElementById('rb-list');
+  const filtered = tab==='all' ? RECIPES : RECIPES.filter(r=>r.room===tab);
+  list.innerHTML = filtered.map(recipe => {
+    const dmgStr = recipe.dmg > 0 ? recipe.dmg : '—';
+    const rngStr = recipe.range > 0 ? recipe.range : '—';
+    const costHtml = Object.entries(recipe.cost).map(([res,n]) =>
+      `<span class="rb-cost-item">${RES_EMOJI[res]} ${n} ${res}</span>`
+    ).join('');
+    return `
+      <div class="rb-card">
+        <div class="rb-card-name">${recipe.name}</div>
+        <div class="rb-card-room rb-room-${recipe.room}">${recipe.room === 'armoury' ? '⚔ Armoury' : '🧪 Lab'}</div>
+        <div class="rb-stats">
+          <div class="rb-stat">⚔ DMG <strong>${dmgStr}</strong></div>
+          <div class="rb-stat">🎯 RNG <strong>${rngStr}</strong></div>
+        </div>
+        <div class="rb-ability">✦ ${recipe.ability}</div>
+        <div class="rb-cost"><span style="opacity:0.6;margin-right:2px">Cost:</span>${costHtml}</div>
+      </div>`;
+  }).join('');
+}
+</script>
 
 <div class="tooltip" id="tooltip"></div>
 
@@ -971,7 +1112,7 @@ function getCastleRooms(faction) {
   }
 }
 
-const TRADE_ZONES = [ {r:4,c:4}, {r:4,c:11}, {r:11,c:4}, {r:11,c:11} ];
+// trade zones are handled inline in isTradeZone()
 
 // =====================================================================
 // STATE
@@ -1333,7 +1474,11 @@ function getRoomAt(r, c) {
 }
 
 function isTradeZone(r, c) {
-  return TRADE_ZONES.some(t=>t.r===r && t.c===c);
+  const B = BOARD_SIZE - 1; // 15
+  return (r <= 3 && c <= 3) ||           // top-left
+         (r <= 3 && c >= B-3) ||          // top-right
+         (r >= B-3 && c <= 3) ||          // bottom-left
+         (r >= B-3 && c >= B-3);          // bottom-right
 }
 
 function isOccupied(r, c, excludeUnitId=null) {
@@ -1378,8 +1523,8 @@ function isInNoMansLand(r, c) {
 function currentPlayer() { return G.players[G.turnIndex]; }
 function isMyTurn() { return currentPlayer() && currentPlayer().id === G.myId; }
 
-function endTurn() {
-  if(!isMyTurn()) return;
+function endTurn(fromAI) {
+  if(!fromAI && !isMyTurn()) return;
   const cp = currentPlayer();
   cp.attackedThisTurn = [];
   
@@ -1469,16 +1614,21 @@ function checkVictory() {
 
 function spawnResources() {
   const nmlR1=4, nmlR2=11, nmlC1=4, nmlC2=11;
-  const count = 3 + G.players.length;
+  const weightedPool = ['wood','wood','wood','metal','metal','metal','chemicals','herbs','energy'];
   let attempts = 0;
-  while(G.resources.length < 8 && attempts < 80) {
+
+  while (G.resources.length < 8 && attempts < 200) {
     attempts++;
-    const r = nmlR1 + Math.floor(Math.random()*(nmlR2-nmlR1+1));
-    const c = nmlC1 + Math.floor(Math.random()*(nmlC2-nmlC1+1));
-    if(!G.resources.find(res=>res.r===r&&res.c===c) && !isOccupied(r,c)) {
-      const type = RESOURCES[Math.floor(Math.random()*RESOURCES.length)];
-      G.resources.push({r, c, type});
-    }
+
+    const r = nmlR1 + Math.floor(Math.random() * (nmlR2 - nmlR1 + 1));
+    const c = nmlC1 + Math.floor(Math.random() * (nmlC2 - nmlC1 + 1));
+
+    if (G.resources.find(res => res.r === r && res.c === c)) continue;
+    if (isOccupied(r, c)) continue;
+    if (isTradeZone(r, c)) continue;
+
+    const type = weightedPool[Math.floor(Math.random() * weightedPool.length)];
+    G.resources.push({ r, c, type });
   }
 }
 
@@ -1628,8 +1778,10 @@ function doNewSoldier() {
     addLog('Need 1 of each resource to create a soldier!'); return;
   }
   
-  const pos = getSpawnPositions(cp.faction, 1);
-  if(!pos.length) { addLog('No space in your castle!'); return; }
+  // Find a free spawn position not occupied by any unit
+  const allSpawns = getSpawnPositions(cp.faction, 4);
+  const pos = allSpawns.filter(p => !isOccupied(p.r, p.c));
+  if(!pos.length) { addLog('No space to spawn — move your units first!'); return; }
   
   RESOURCES.forEach(r => cp.resources[r]--);
   
@@ -1816,7 +1968,7 @@ function onCellClick(r, c) {
   }
 }
 
-function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc) {
+function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc, skipFinish) {
   let dmg = weapon.dmg;
   
   if(atkPlayer.faction === 'red') dmg++;
@@ -1909,7 +2061,7 @@ function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc)
   
   G.mode = null;
   G.selectedWeapon = null;
-  finishAction();
+  if(!skipFinish) finishAction();
 }
 
 function confirmTakeHostage() {
@@ -2236,132 +2388,237 @@ function doAITurn() {
   if(!G.isAIGame) return;
   const cp = currentPlayer();
   if(!cp || !cp.isAI) return;
-  
+
   addLog(`🤖 AI is thinking...`, 'log-system');
-  
-  let apLeft = cp.ap;
-  
-  function runAI() {
-    if(apLeft <= 0) { endTurn(); return; }
-    
-    const cp = currentPlayer();
-    if(!cp || !cp.isAI) return;
-    
-    let acted = false;
-    
-    for(const unit of cp.units) {
-      if(apLeft < 1) break;
-      const res = getResourceAt(unit.r, unit.c);
-      if(res) {
-        cp.resources[res.type] = (cp.resources[res.type]||0)+1;
-        G.resources = G.resources.filter(x=>!(x.r===unit.r&&x.c===unit.c));
-        apLeft--;
-        cp.ap = apLeft;
-        addLog(`🤖 AI collects ${res.type}`, 'log-move');
-        acted = true;
-        break;
-      }
+
+  // Build a queue of actions to execute with delays
+  const actions = [];
+  aiPlanTurn(cp, actions);
+
+  function executeNext(i) {
+    if(G.phase === 'ended') return;
+    if(i >= actions.length) {
+      endTurn(true);
+      return;
     }
-    
-    if(!acted) {
-      for(const unit of cp.units) {
-        if(apLeft < 1) break;
-        if(cp.attackedThisTurn.includes && cp.attackedThisTurn.length >= cp.units.length) break;
-        
-        const weapons = getWeaponsForAttack(cp);
-        if(!weapons.length) continue;
-        
-        for(const weapon of weapons) {
-          let target = null;
-          let bestDist = Infinity;
-          
-          G.players.filter(p=>p.id!==cp.id && p.alive).forEach(p => {
-            p.units.forEach(u => {
-              if(cp.attackedThisTurn.includes(u.id)) return;
-              const d = chebyshevDist(unit.r, unit.c, u.r, u.c);
-              if(d <= weapon.range && d < bestDist && !isTradeZone(unit.r,unit.c)) {
-                bestDist = d;
-                target = {player:p, unit:u};
-              }
-            });
-          });
-          
-          if(target) {
-            performAttack(unit, target.unit, target.player, cp, weapon, target.unit.r, target.unit.c);
-            apLeft = cp.ap;
-            acted = true;
-            break;
-          }
-        }
-        if(acted) break;
-      }
-    }
-    
-    if(!acted) {
-      for(const unit of cp.units) {
-        if(apLeft < 1) break;
-        const roomInfo = getRoomAt(unit.r, unit.c);
-        if(!roomInfo || roomInfo.faction !== cp.faction) continue;
-        
-        const craftable = RECIPES.filter(r => r.room===roomInfo.room && canCraft(cp,r) && r.id!=='bandage');
-        if(craftable.length) {
-          G.selectedUnit = {playerId:cp.id, unitId:unit.id};
-          doCraft(craftable[0]);
-          apLeft = cp.ap;
-          acted = true;
-          break;
-        }
-      }
-    }
-    
-    if(!acted) {
-      const unit = cp.units[0];
-      if(unit && apLeft >= 1) {
-        let bestTarget = null;
-        let bestDist = Infinity;
-        
-        G.resources.forEach(res => {
-          const d = chebyshevDist(unit.r, unit.c, res.r, res.c);
-          if(d < bestDist) { bestDist=d; bestTarget={r:res.r,c:res.c}; }
-        });
-        
-        G.players.filter(p=>p.id!==cp.id && p.alive).forEach(p => {
-          p.units.forEach(u => {
-            const d = chebyshevDist(unit.r, unit.c, u.r, u.c);
-            if(d < bestDist) { bestDist=d; bestTarget={r:u.r, c:u.c}; }
-          });
-        });
-        
-        if(bestTarget && bestDist > 1) {
-          const dr = Math.sign(bestTarget.r - unit.r);
-          const dc = Math.sign(bestTarget.c - unit.c);
-          const nr = unit.r + dr;
-          const nc = unit.c + dc;
-          if(nr>=0&&nr<BOARD_SIZE&&nc>=0&&nc<BOARD_SIZE&&!isOccupied(nr,nc,unit.id)) {
-            unit.r = nr; unit.c = nc;
-            cp.ap--;
-            apLeft = cp.ap;
-            addLog(`🤖 AI moves toward target`, 'log-move');
-            acted = true;
-          }
-        }
-      }
-    }
-    
-    if(!acted) { endTurn(); return; }
-    
+    const action = actions[i];
+    action();
     checkVictory();
     renderBoard();
     updateUI();
-    
-    if(cp.ap > 0 && G.phase !== 'ended') {
-      setTimeout(runAI, 400);
-    } else {
-      setTimeout(endTurn, 600);
+    if(G.phase === 'ended') return;
+    setTimeout(() => executeNext(i + 1), 420);
+  }
+
+  setTimeout(() => executeNext(0), 600);
+}
+
+function aiMoveUnit(cp, unit, tr, tc) {
+  // Move unit one step toward (tr,tc), up to maxMove squares
+  const maxMove = cp.faction === 'white' ? 4 : 3;
+  // Try to step directly toward target
+  const dr = Math.sign(tr - unit.r);
+  const dc = Math.sign(tc - unit.c);
+  // Try diagonal first, then cardinal directions
+  const tries = [
+    {r: unit.r+dr, c: unit.c+dc},
+    {r: unit.r+dr, c: unit.c},
+    {r: unit.r,    c: unit.c+dc},
+    {r: unit.r-dr, c: unit.c+dc},
+    {r: unit.r+dr, c: unit.c-dc},
+  ];
+  for(const t of tries) {
+    if(t.r<0||t.r>=BOARD_SIZE||t.c<0||t.c>=BOARD_SIZE) continue;
+    if(isOccupied(t.r, t.c, unit.id)) continue;
+    const dist = chebyshevDist(unit.r, unit.c, t.r, t.c);
+    if(dist > maxMove) continue;
+    unit.r = t.r;
+    unit.c = t.c;
+    cp.ap--;
+    return true;
+  }
+  return false;
+}
+
+function aiPlanTurn(cp, actions) {
+  // Work with a simulated copy of AP
+  let apSim = cp.ap;
+
+  // Helper: find nearest enemy unit to a given unit
+  function nearestEnemy(unit) {
+    let best = null, bestD = Infinity;
+    G.players.filter(p=>p.id!==cp.id&&p.alive).forEach(p=>{
+      p.units.forEach(u=>{
+        const d = chebyshevDist(unit.r,unit.c,u.r,u.c);
+        if(d<bestD){bestD=d;best={player:p,unit:u,dist:d};}
+      });
+    });
+    return best;
+  }
+
+  // Helper: find nearest resource to a unit
+  function nearestResource(unit) {
+    let best = null, bestD = Infinity;
+    G.resources.forEach(res=>{
+      const d = chebyshevDist(unit.r,unit.c,res.r,res.c);
+      if(d<bestD){bestD=d;best={res,dist:d};}
+    });
+    return best;
+  }
+
+  // Helper: find center of a room in AI's castle
+  function roomCenter(roomName) {
+    const rooms = getCastleRooms(cp.faction);
+    const z = rooms[roomName];
+    return {r: Math.floor((z.r1+z.r2)/2), c: Math.floor((z.c1+z.c2)/2)};
+  }
+
+  // Decide what the AI needs most
+  const hasWeapon = getWeaponsForAttack(cp).length > 0;
+  const totalRes = RESOURCES.reduce((s,r)=>(s+(cp.resources[r]||0)),0);
+  const wantCraft = !hasWeapon && totalRes >= 3;
+  const wantResources = !hasWeapon && totalRes < 3;
+
+  // For each unit, decide its role this turn
+  for(let ui=0; ui<cp.units.length; ui++) {
+    if(apSim <= 0) break;
+    const unit = cp.units[ui];
+    if(unit.prisoner) continue;
+
+    const weapons = getWeaponsForAttack(cp);
+
+    // 1. If unit is on a resource, collect it
+    const resHere = getResourceAt(unit.r, unit.c);
+    if(resHere && apSim >= 1) {
+      const u = unit; // capture
+      actions.push(() => {
+        cp.resources[resHere.type] = (cp.resources[resHere.type]||0)+1;
+        G.resources = G.resources.filter(x=>!(x.r===u.r&&x.c===u.c));
+        cp.ap--;
+        addLog(`🤖 AI collects ${resHere.type}`, 'log-move');
+      });
+      apSim--;
+      continue;
+    }
+
+    // 2. If has weapons and enemy in range, attack
+    if(weapons.length && apSim >= 1) {
+      let attacked = false;
+      for(const weapon of weapons) {
+        let target = null, bestD = Infinity;
+        G.players.filter(p=>p.id!==cp.id&&p.alive).forEach(p=>{
+          p.units.forEach(u=>{
+            if(cp.attackedThisTurn.includes(u.id)) return;
+            const d = chebyshevDist(unit.r,unit.c,u.r,u.c);
+            if(d<=weapon.range && d<bestD && !isTradeZone(unit.r,unit.c)){
+              bestD=d; target={player:p,unit:u};
+            }
+          });
+        });
+        if(target) {
+          const w=weapon, tgt=target, atk=unit;
+          actions.push(() => {
+            G.selectedWeapon = w.id;
+            performAttack(atk, tgt.unit, tgt.player, cp, w, tgt.unit.r, tgt.unit.c, true);
+          });
+          apSim--;
+          attacked = true;
+          break;
+        }
+      }
+      if(attacked) continue;
+    }
+
+    // 3. If in own castle room and can craft, craft a weapon
+    const roomInfo = getRoomAt(unit.r, unit.c);
+    if(roomInfo && roomInfo.faction === cp.faction && apSim >= 1) {
+      const craftable = RECIPES.filter(r => r.room===roomInfo.room && canCraft(cp,r) && r.id!=='bandage');
+      if(craftable.length) {
+        const recipe = craftable[0], u = unit;
+        actions.push(() => {
+          G.selectedUnit = {playerId:cp.id, unitId:u.id};
+          Object.entries(recipe.cost).forEach(([res,n]) => { cp.resources[res] -= n; });
+          cp.ap--;
+          const existing = cp.inventory.find(x=>x.id===recipe.id);
+          if(existing) existing.count++;
+          else cp.inventory.push({id:recipe.id, count:1});
+          addLog(`🤖 AI crafts ${recipe.name}`, 'log-craft');
+        });
+        apSim--;
+        continue;
+      }
+    }
+
+    // 4. Move toward a useful destination
+    if(apSim >= 1) {
+      let dest = null;
+
+      if(!hasWeapon && !wantResources) {
+        // Has resources, head to armoury to craft
+        dest = roomCenter('armoury');
+        // Check if enough resources for armoury recipe
+        const armRecipes = RECIPES.filter(r=>r.room==='armoury'&&!r.lab&&canCraft(cp,r));
+        if(!armRecipes.length) {
+          const labRecipes = RECIPES.filter(r=>r.room==='lab'&&canCraft(cp,r));
+          if(labRecipes.length) dest = roomCenter('lab');
+        }
+      } else if(wantResources) {
+        // Head toward nearest resource
+        const nr = nearestResource(unit);
+        if(nr) dest = {r:nr.res.r, c:nr.res.c};
+      }
+
+      // If has weapons, aggressively move toward enemies
+      if(weapons.length) {
+        const enemy = nearestEnemy(unit);
+        if(enemy) {
+          const weapon = weapons[0];
+          // Move to just within weapon range
+          if(enemy.dist > weapon.range) {
+            dest = {r:enemy.unit.r, c:enemy.unit.c};
+          }
+        }
+      }
+
+      // Fallback: if no goal, just find nearest enemy
+      if(!dest) {
+        const enemy = nearestEnemy(unit);
+        if(enemy) dest = {r:enemy.unit.r, c:enemy.unit.c};
+      }
+
+      if(dest) {
+        const u = unit, d = dest;
+        // Only queue the move if not already there
+        if(chebyshevDist(unit.r, unit.c, d.r, d.c) > 0) {
+          actions.push(() => {
+            aiMoveUnit(cp, u, d.r, d.c);
+            addLog(`🤖 AI moves toward objective`, 'log-move');
+          });
+          apSim--;
+          continue;
+        }
+      }
+    }
+
+    // 5. If in hospital and hurt, heal
+    if(roomInfo && roomInfo.room==='hospital' && roomInfo.faction===cp.faction && unit.hp < unit.maxHp && apSim >= 1) {
+      const u = unit;
+      actions.push(() => {
+        const healAmt = cp.faction==='blue' ? 2 : 1;
+        u.hp = Math.min(u.maxHp, u.hp + healAmt);
+        cp.ap--;
+        addLog(`🤖 AI heals unit (${u.hp}/${u.maxHp})`, 'log-craft');
+      });
+      apSim--;
     }
   }
-  
-  setTimeout(runAI, 600);
+
+  // If still AP left and nothing done, at least move all idle units
+  if(apSim > 0 && actions.length === 0) {
+    actions.push(() => {
+      addLog(`🤖 AI ends turn`, 'log-system');
+    });
+  }
 }
 
 // =====================================================================
