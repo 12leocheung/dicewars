@@ -1121,6 +1121,9 @@ const CASTLE_ZONES = {
 };
 
 function getCastleRooms(faction) {
+  // Rooms are placed to maintain rotational symmetry from the center.
+  // Viewing from the player's perspective looking inward toward the center:
+  // Back-Left: Hospital, Back-Right: Prison, Front-Left: Armoury, Front-Right: Lab
   switch (faction) {
     case "red":
       return {
@@ -1131,24 +1134,24 @@ function getCastleRooms(faction) {
       };
     case "blue":
       return {
-        hospital: { r1:4, r2:7,  c1:12, c2:13 },
-        prison:   { r1:4, r2:7,  c1:14, c2:15 },
-        armoury:  { r1:8, r2:11, c1:12, c2:13 },
-        lab:      { r1:8, r2:11, c1:14, c2:15 }
+        hospital: { r1:4, r2:7,  c1:14, c2:15 },
+        prison:   { r1:8, r2:11, c1:14, c2:15 },
+        armoury:  { r1:4, r2:7,  c1:12, c2:13 },
+        lab:      { r1:8, r2:11, c1:12, c2:13 }
       };
     case "green":
       return {
-        hospital: { r1:12, r2:13, c1:4, c2:7 },
-        prison:   { r1:12, r2:13, c1:8, c2:11 },
-        armoury:  { r1:14, r2:15, c1:4, c2:7 },
-        lab:      { r1:14, r2:15, c1:8, c2:11 }
+        hospital: { r1:14, r2:15, c1:8, c2:11 },
+        prison:   { r1:14, r2:15, c1:4, c2:7 },
+        armoury:  { r1:12, r2:13, c1:8, c2:11 },
+        lab:      { r1:12, r2:13, c1:4, c2:7 }
       };
     case "white":
       return {
-        hospital: { r1:4, r2:7,  c1:0, c2:1 },
-        prison:   { r1:4, r2:7,  c1:2, c2:3 },
-        armoury:  { r1:8, r2:11, c1:0, c2:1 },
-        lab:      { r1:8, r2:11, c1:2, c2:3 }
+        hospital: { r1:8, r2:11, c1:0, c2:1 },
+        prison:   { r1:4, r2:7,  c1:0, c2:1 },
+        armoury:  { r1:8, r2:11, c1:2, c2:3 },
+        lab:      { r1:4, r2:7,  c1:2, c2:3 }
       };
   }
 }
@@ -2880,3 +2883,4 @@ document.querySelectorAll('.faction-btn').forEach(btn => {
 </script>
 </body>
 </html>
+  
