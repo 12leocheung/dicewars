@@ -847,7 +847,6 @@
 
 <!-- GAME -->
 <div id="screen-game" class="screen">
-  <!-- LEFT PANEL -->
   <div class="game-left">
     <div class="turn-banner" id="turn-banner">YOUR TURN</div>
 
@@ -1131,13 +1130,13 @@ const RECIPES = [
 
 const BOARD_SIZE = 16;
 
-// Extraction zones: 4x4 corners of No Man's Land (rows 4-11, cols 4-11)
+// Extraction zones: 4x4 corners of the full board (outside No Man's Land)
 // Each zone provides a specific resource type
 const EXTRACTION_ZONES = [
-  { id:'ez_nw', r1:4, r2:7,  c1:4, c2:7,  resource:'wood',      label:'🪵' },
-  { id:'ez_ne', r1:4, r2:7,  c1:8, c2:11, resource:'metal',     label:'⚙' },
-  { id:'ez_sw', r1:8, r2:11, c1:4, c2:7,  resource:'herbs',     label:'🌿' },
-  { id:'ez_se', r1:8, r2:11, c1:8, c2:11, resource:'energy',    label:'⚡' },
+  { id:'ez_nw', r1:0,  r2:3,  c1:0,  c2:3,  resource:'wood',      label:'🪵' },
+  { id:'ez_ne', r1:0,  r2:3,  c1:12, c2:15, resource:'metal',     label:'⚙' },
+  { id:'ez_sw', r1:12, r2:15, c1:0,  c2:3,  resource:'herbs',     label:'🌿' },
+  { id:'ez_se', r1:12, r2:15, c1:12, c2:15, resource:'energy',    label:'⚡' },
 ];
 
 function getExtractionZoneAt(r, c) {
@@ -1809,7 +1808,7 @@ function checkVictory() {
 
 function spawnResources() {
   const nmlR1=4, nmlR2=11, nmlC1=4, nmlC2=11;
-  const weightedPool = ['wood','wood','wood','metal','metal','metal','chemicals','herbs','energy'];
+  const weightedPool = ['wood','wood','wood','metal','metal','metal','chemicals','chemicals','herbs','herbs','energy'];
   let attempts = 0;
 
   while (G.resources.length < 8 && attempts < 200) {
