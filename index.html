@@ -326,6 +326,7 @@
 
   .board-cell.highlight-move { background: rgba(80,200,80,0.35) !important; cursor: pointer; }
   .board-cell.highlight-attack { background: rgba(220,50,50,0.4) !important; cursor: pointer; }
+  .board-cell.highlight-flashbang { background: rgba(255,200,0,0.18) !important; cursor: crosshair; }
 
   /* New Game Elements Rendering */
   .mist-layer {
@@ -759,6 +760,28 @@
   /* Trade zone indicator */
   .board-cell.trade-zone { border: 2px dashed rgba(212,160,23,0.5) !important; }
 
+  /* Extraction zones */
+  .board-cell.extraction-zone { border: 1px solid rgba(255,255,255,0.15) !important; }
+  .board-cell.ez-wood      { background: rgba(139,69,19,0.18) !important; }
+  .board-cell.ez-metal     { background: rgba(112,128,144,0.18) !important; }
+  .board-cell.ez-herbs     { background: rgba(34,139,34,0.18) !important; }
+  .board-cell.ez-energy    { background: rgba(255,215,0,0.13) !important; }
+
+  /* Extractor token */
+  .extractor-token {
+    position: absolute;
+    width: 12px; height: 12px;
+    border-radius: 3px;
+    top: 3px; left: 3px;
+    z-index: 1;
+    border: 2px solid rgba(0,0,0,0.5);
+    box-shadow: 0 0 4px rgba(255,255,255,0.3);
+  }
+  .extractor-red   { background: var(--red-fire); }
+  .extractor-blue  { background: var(--blue-water); }
+  .extractor-green { background: var(--green-earth); }
+  .extractor-white { background: var(--white-air); }
+
   /* Highlight current player's castle */
   .my-castle { outline: 2px solid rgba(212,160,23,0.3); }
 </style>
@@ -851,7 +874,7 @@
       <button class="action-btn" id="btn-heal" onclick="doHeal()">💊 Heal in Hospital <span class="ap-cost">1 AP</span></button>
       <button class="action-btn" id="btn-craft" onclick="openCraftModal()">🔨 Craft <span class="ap-cost">1 AP</span></button>
       <button class="action-btn" id="btn-new-soldier" onclick="doNewSoldier()">➕ New Soldier <span class="ap-cost">2 AP</span></button>
-      <button class="action-btn" id="btn-inventory" onclick="openItemUseModal()">🎒 Use Item</button>
+      <button class="action-btn" id="btn-inventory" onclick="openItemUseModal()">🎒 Use Item <span class="ap-cost">1 AP</span></button>
       <button class="action-btn" id="btn-surrender" onclick="doSurrender()">🏳 Surrender (0 AP)</button>
       <button class="action-btn" id="btn-hostage" onclick="activateHostageMode()">⛓ Take Hostage <span class="ap-cost">1 AP</span></button>
     </div>
@@ -1087,25 +1110,40 @@ const RES_COLORS = { wood:'#8B4513', metal:'#708090', chemicals:'#9932CC', herbs
 const RES_EMOJI  = { wood:'🪵', metal:'⚙', chemicals:'🧪', herbs:'🌿', energy:'⚡' };
 
 const RECIPES = [
-  // Weapons
+  // Weapons (Armoury)
   { id:'sword',      name:'Sword',      isItem:false, dmg:2, range:1, cost:{wood:1,metal:2},                    room:'armoury', ability:'If this attack defeats an enemy, immediately deal 1 damage to an additional adjacent enemy.' },
   { id:'bow',        name:'Bow',        isItem:false, dmg:1, range:5, cost:{wood:3,herbs:1},                    room:'armoury', ability:'If attacking an enemy at exactly maximum range (5), this attack deals +1 damage.' },
-  { id:'gun',        name:'Gun',        isItem:false, dmg:2, range:5, cost:{metal:3,chemicals:2,wood:1},        room:'armoury', ability:'This weapon cannot be dodged, blocked, or mitigated by any character abilities.' },
+  { id:'gun',        name:'Gun',        isItem:false, dmg:2, range:6, minRange:5, cost:{metal:3,chemicals:2,wood:1}, room:'armoury', ability:'Range 5–6 only. Cannot be dodged, blocked, or mitigated by any character abilities.' },
   { id:'spear',      name:'Spear',      isItem:false, dmg:2, range:2, cost:{wood:3,metal:2},                    room:'armoury', ability:'Can attack two enemies at once if they are standing in a straight line within your range.' },
-  { id:'grenade',    name:'Grenade',    isItem:false, dmg:2, range:4, cost:{metal:3,chemicals:2},               room:'lab',     ability:'Deals 2 damage to the target square, and 1 damage to all immediately adjacent squares.' },
-  { id:'equalizer',  name:'Equalizer',  isItem:false, dmg:0, range:3, cost:{metal:3,chemicals:2,energy:2,herbs:1}, room:'lab',  ability:'When attacking, if the enemy has more health than you, reduce their health to your health.' },
-  { id:'pusher',     name:'Pusher',     isItem:false, dmg:1, range:5, cost:{metal:3,chemicals:2,energy:2},      room:'lab',     ability:'Upon hitting the target, they are immediately pushed 2 squares directly away from the attacker.' },
-  { id:'flashbang',  name:'Flashbang',  isItem:false, dmg:0, range:4, cost:{chemicals:2,energy:1,metal:1},      room:'lab',     ability:'Target a 3x3 area. Any enemy caught cannot make ranged attacks (>2 range) on their next turn.' },
-
-  // Items
+  // Weapons (Lab)
+  { id:'grenade',    name:'Grenade',    isItem:false, dmg:2, range:4, cost:{metal:3,chemicals:2},               room:'lab',     ability:'Deals 2 damage to the target square, and 1 damage to all immediately adjacent squares (including teammates!).' },
+  { id:'equalizer',  name:'Equalizer',  isItem:false, dmg:0, range:3, cost:{metal:3,chemicals:2,energy:2,herbs:1}, room:'lab',  ability:'Compare face values. If the enemy has more health than you, reduce their health to match yours.' },
+  { id:'pusher',     name:'Pusher',     isItem:false, dmg:1, range:5, cost:{metal:3,chemicals:2,energy:2},      room:'lab',     ability:'Target is pushed 2 squares directly away from attacker. Cannot push through walls.' },
+  // Items (Lab)
   { id:'bandage',    name:'Bandage',    isItem:true, apCost:1, cost:{herbs:3},                           room:'lab', ability:'Heal 2 HP at any time.' },
-  { id:'smoke_grenade',name:'Smoke Grenade',isItem:true, apCost:0, cost:{chemicals:2,herbs:1,energy:1},  room:'lab', ability:'Play anytime. Next targeted attack is dodged, and you immediately teleport to a free adjacent square.' },
+  { id:'smoke_grenade',name:'Smoke Grenade',isItem:true, apCost:0, cost:{chemicals:2,herbs:1,energy:1},  room:'lab', ability:'Play when targeted by an attack to dodge all damage. Instantly move to any free adjacent square.' },
   { id:'stim_shot',  name:'Stim Shot',  isItem:true, apCost:0, cost:{chemicals:3,herbs:2,energy:1},      room:'lab', ability:'Gain an extra 2 AP this turn.' },
-  { id:'prox_mine',  name:'Prox. Mine', isItem:true, apCost:1, cost:{metal:3,chemicals:3},               room:'lab', ability:'Place under player. When any unit enters a 2-square radius, deals 3 damage to everyone in radius.' },
-  { id:'healing_mist',name:'Heal Mist', isItem:true, apCost:1, cost:{chemicals:3,herbs:2},               room:'lab', ability:'Place mist. Anyone (friend or foe) within 1 sq is healed 2HP at the start of the round. Lasts 3 rounds.' },
+  { id:'prox_mine',  name:'Prox. Mine', isItem:true, apCost:1, cost:{metal:3,chemicals:3},               room:'lab', ability:'Place on your square. If anyone enters within a 2-square radius, everyone in that radius takes 3 damage.' },
+  { id:'healing_mist',name:'Heal Mist', isItem:true, apCost:1, cost:{chemicals:3,herbs:2},               room:'lab', ability:'Place on your square. Heals anyone (friend or foe) 2 HP per turn. Lasts 3 turns.' },
+  { id:'flashbang',  name:'Flashbang',  isItem:true, apCost:1, cost:{chemicals:2,metal:1,energy:1},      room:'lab', ability:'Target a 3×3 area. Enemies caught cannot make ranged attacks (range > 2) on their next turn.' },
+  { id:'extractor',  name:'Extractor',  isItem:true, apCost:1, cost:{metal:2,energy:1},                  room:'lab', ability:'Place in an extraction zone to automatically collect that zone\'s resource once per turn. Has 1 HP — can be destroyed.' },
 ];
 
 const BOARD_SIZE = 16;
+
+// Extraction zones: 4x4 corners of No Man's Land (rows 4-11, cols 4-11)
+// Each zone provides a specific resource type
+const EXTRACTION_ZONES = [
+  { id:'ez_nw', r1:4, r2:7,  c1:4, c2:7,  resource:'wood',      label:'🪵' },
+  { id:'ez_ne', r1:4, r2:7,  c1:8, c2:11, resource:'metal',     label:'⚙' },
+  { id:'ez_sw', r1:8, r2:11, c1:4, c2:7,  resource:'herbs',     label:'🌿' },
+  { id:'ez_se', r1:8, r2:11, c1:8, c2:11, resource:'energy',    label:'⚡' },
+];
+
+function getExtractionZoneAt(r, c) {
+  return EXTRACTION_ZONES.find(z => r>=z.r1 && r<=z.r2 && c>=z.c1 && c<=z.c2) || null;
+}
+
 const CASTLES = {
   red:   { rows:[0,5],  cols:[5,15],  faction:'red',   name:'Red Castle'   },
   blue:  { rows:[0,5],  cols:[10,15], faction:'blue',  name:'Blue Castle'  },
@@ -1170,6 +1208,7 @@ let G = {
   resources: [],  // [{r,c,type}]
   mines: [],      // [{r,c,ownerId}]
   mists: [],      // [{r,c,turnsLeft}]
+  extractors: [], // [{r,c,faction,zoneId,hp}]
   selectedUnit: null, // {playerId, unitId}
   mode: null,     // null | 'move' | 'attack' | 'hostage'
   pendingHostageTarget: null,
@@ -1439,6 +1478,7 @@ function initGame(players) {
   G.resources = [];
   G.mines = [];
   G.mists = [];
+  G.extractors = [];
   G.surrenderedUnits = new Set();
   
   spawnResources();
@@ -1478,6 +1518,7 @@ function serializeState() {
     resources: G.resources,
     mines: G.mines,
     mists: G.mists,
+    extractors: G.extractors,
     surrenderedUnits: [...G.surrenderedUnits],
   };
 }
@@ -1493,6 +1534,7 @@ function applyGameState(state) {
   G.resources = state.resources;
   G.mines = state.mines || [];
   G.mists = state.mists || [];
+  G.extractors = state.extractors || [];
   G.surrenderedUnits = new Set(state.surrenderedUnits || []);
   G.selectedUnit = null;
   G.mode = null;
@@ -1598,6 +1640,7 @@ function endTurn(fromAI) {
     G.round++;
     spawnResources();
     processHealingMists();
+    processExtractors();
     addLog(`--- Round ${G.round} begins ---`, 'log-system');
   }
   
@@ -1640,6 +1683,17 @@ function processHealingMists() {
     if(healedSomeone) addLog(`🌿 Healing Mist healed units at (${mist.r},${mist.c})`, 'log-craft');
   });
   G.mists = G.mists.filter(m => m.turnsLeft > 0);
+}
+
+function processExtractors() {
+  G.extractors.forEach(ext => {
+    const zone = EXTRACTION_ZONES.find(z => z.id === ext.zoneId);
+    if(!zone) return;
+    const owner = G.players.find(p => p.faction === ext.faction);
+    if(!owner || !owner.alive) return;
+    owner.resources[zone.resource] = (owner.resources[zone.resource]||0) + 1;
+    addLog(`⚙ ${owner.name}'s extractor collected 1 ${RES_EMOJI[zone.resource]} ${zone.resource}`, 'log-craft');
+  });
 }
 
 function checkMines() {
@@ -1714,7 +1768,9 @@ function checkDeaths() {
       }
       return true;
     });
-    if(p.units.length === 0) {
+    // Only mark eliminated here if truly no units left (prisoners still count as units)
+    // The prison-elimination case is handled in checkVictory
+    if(p.units.length === 0 && p.alive) {
       p.alive = false;
       addLog(`🏴 ${p.name} has been eliminated!`, 'log-system');
     }
@@ -1722,7 +1778,21 @@ function checkDeaths() {
 }
 
 function checkVictory() {
-  const alive = G.players.filter(p => p.alive && p.units.length > 0);
+  // A player is eliminated if all units are dead OR all remaining units are prisoners
+  G.players.forEach(p => {
+    if(!p.alive) return;
+    if(p.units.length === 0) {
+      p.alive = false;
+      return;
+    }
+    const allPrisoners = p.units.every(u => u.prisoner);
+    if(allPrisoners) {
+      p.alive = false;
+      addLog(`⛓ ${p.name} has no free soldiers — eliminated!`, 'log-system');
+    }
+  });
+
+  const alive = G.players.filter(p => p.alive);
   if(alive.length <= 1) {
     G.phase = 'ended';
     const winner = alive[0];
@@ -1902,7 +1972,7 @@ function openItemUseModal() {
         <div class="recipe-ability">${r.ability}</div>
       `;
       if(canAfford) {
-        el.onclick = () => { doUseItem(r.id); closeModal('modal-item-use'); };
+        el.onclick = () => { doUseItem(r.id); if(r.id !== 'flashbang') closeModal('modal-item-use'); };
       }
       list.appendChild(el);
     });
@@ -1938,6 +2008,36 @@ function doUseItem(itemId) {
   } else if(itemId === 'prox_mine') {
     G.mines.push({ r: unit.r, c: unit.c, ownerId: cp.id });
     addLog(`💣 ${unit.id} planted a Proximity Mine`, 'log-craft');
+  } else if(itemId === 'flashbang') {
+    // Enter flashbang targeting mode
+    G.mode = 'flashbang_target';
+    closeModal('modal-item-use');
+    addLog(`🔦 Click a cell to center the Flashbang 3×3 area`, 'log-system');
+    renderBoard();
+    return; // Don't call finishAction yet
+  } else if(itemId === 'extractor') {
+    const zone = getExtractionZoneAt(unit.r, unit.c);
+    if(!zone) {
+      // Refund item and AP
+      cp.ap += recipe.apCost;
+      invItem.count++;
+      if(!cp.inventory.find(x=>x.id===itemId)) cp.inventory.push({id:itemId,count:1});
+      addLog(`⚠ Must be standing in an extraction zone to place an extractor!`);
+      finishAction();
+      return;
+    }
+    // Check only one colour per zone
+    const existing = G.extractors.find(e => e.zoneId === zone.id);
+    if(existing && existing.faction !== cp.faction) {
+      cp.ap += recipe.apCost;
+      invItem.count++;
+      if(!cp.inventory.find(x=>x.id===itemId)) cp.inventory.push({id:itemId,count:1});
+      addLog(`⚠ This extraction zone already has a different team's extractor!`);
+      finishAction();
+      return;
+    }
+    G.extractors.push({ r: unit.r, c: unit.c, faction: cp.faction, zoneId: zone.id, hp: 1 });
+    addLog(`⚙ ${cp.name} placed an Extractor in the ${zone.resource} zone!`, 'log-craft');
   } else if(itemId === 'healing_mist') {
     G.mists.push({ r: unit.r, c: unit.c, turnsLeft: 3 });
     addLog(`🌿 ${unit.id} deployed Healing Mist`, 'log-craft');
@@ -2065,6 +2165,24 @@ function onCellClick(r, c) {
   const cp = currentPlayer();
   const clickedUnit = getUnitAt(r, c);
   
+  if(G.mode === 'flashbang_target') {
+    // Apply flashbang effect to 3x3 area centered on clicked cell
+    const cp = currentPlayer();
+    for(let dr=-1; dr<=1; dr++) for(let dc=-1; dc<=1; dc++) {
+      const ar=r+dr, ac=c+dc;
+      if(ar<0||ar>=BOARD_SIZE||ac<0||ac>=BOARD_SIZE) continue;
+      const adj = getUnitAt(ar,ac);
+      if(adj && adj.player.id !== cp.id) {
+        adj.unit.flashbanged = 2;
+        addLog(`⚡ ${adj.unit.id} is flashbanged!`, 'log-combat');
+      }
+    }
+    addLog(`💥 ${cp.name} threw a Flashbang at (${r},${c})!`, 'log-combat');
+    G.mode = null;
+    finishAction();
+    return;
+  }
+
   if(G.mode === 'move') {
     const selUnit = getSelectedUnitObj();
     if(!selUnit) { G.mode=null; renderBoard(); return; }
@@ -2088,6 +2206,32 @@ function onCellClick(r, c) {
   }
   
   if(G.mode === 'attack') {
+    // Check if clicking on an extractor cell (enemy extractor)
+    const extractorHere = G.extractors.find(e => e.r === r && e.c === c);
+    if(extractorHere && extractorHere.faction !== cp.faction) {
+      const selUnit = getSelectedUnitObj();
+      if(!selUnit) { G.mode=null; return; }
+      const weapon = RECIPES.find(r=>r.id===G.selectedWeapon);
+      if(!weapon) { G.mode=null; return; }
+      const extOwner = G.players.find(p => p.faction === extractorHere.faction);
+      if(extOwner && extOwner.id !== cp.id) {
+        const dist = chebyshevDist(selUnit.r, selUnit.c, r, c);
+        if(dist > weapon.range) { addLog(`Out of range!`); return; }
+        if(weapon.minRange && dist < weapon.minRange) { addLog(`Too close!`); return; }
+        extractorHere.hp -= weapon.dmg || 1;
+        cp.attackedThisTurn.push('extractor_' + r + '_' + c);
+        cp.ap--;
+        addLog(`⚙ ${cp.name} attacks extractor! (${extractorHere.hp} HP left)`, 'log-combat');
+        if(extractorHere.hp <= 0) {
+          G.extractors = G.extractors.filter(e => !(e.r===r && e.c===c));
+          addLog(`💥 Extractor destroyed!`, 'log-combat');
+        }
+        G.mode = null; G.selectedWeapon = null;
+        finishAction();
+        return;
+      }
+    }
+
     if(!clickedUnit) { G.mode=null; renderBoard(); return; }
     const {player:target, unit:targetUnit} = clickedUnit;
     
@@ -2102,6 +2246,7 @@ function onCellClick(r, c) {
     
     const dist = chebyshevDist(selUnit.r, selUnit.c, r, c);
     if(dist > weapon.range) { addLog(`Out of range! (need ≤${weapon.range})`); return; }
+    if(weapon.minRange && dist < weapon.minRange) { addLog(`Too close! ${weapon.name} requires range ≥${weapon.minRange}.`); return; }
     
     if(isTradeZone(selUnit.r, selUnit.c) || isTradeZone(r,c)) {
       addLog('No attacking in trade zones!'); return;
@@ -2215,19 +2360,6 @@ function performAttack(attacker, defender, defPlayer, atkPlayer, weapon, tr, tc,
     }
   }
 
-  if(weapon.id === 'flashbang') {
-    for(let dr=-1; dr<=1; dr++) for(let dc=-1; dc<=1; dc++) {
-      const ar=tr+dr, ac=tc+dc;
-      if(ar<0||ar>=16||ac<0||ac>=16) continue;
-      const adj = getUnitAt(ar,ac);
-      if(adj && adj.player.id !== atkPlayer.id) {
-        adj.unit.flashbanged = 2; // Lasts until their next turn ends
-        addLog(`⚡ ${adj.unit.id} is flashbanged!`, 'log-combat');
-      }
-    }
-    dmg = 0;
-  }
-  
   if(weapon.id === 'pusher') {
     const dr = Math.sign(tr - attacker.r);
     const dc = Math.sign(tc - attacker.c);
@@ -2351,6 +2483,7 @@ function renderBoard() {
   
   let moveHighlights = new Set();
   let attackHighlights = new Set();
+  let flashbangHighlights = new Set();
   const mistCells = new Set();
   
   G.mists.forEach(m => {
@@ -2367,6 +2500,11 @@ function renderBoard() {
     }
   }
   
+  if(isMyTurn() && G.mode === 'flashbang_target') {
+    // All cells are valid flashbang targets — highlight the whole board dimly
+    for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++) flashbangHighlights.add(`${r},${c}`);
+  }
+
   if(isMyTurn() && selUnit && G.mode === 'attack' && G.selectedWeapon) {
     const weapon = RECIPES.find(r=>r.id===G.selectedWeapon);
     if(weapon) {
@@ -2374,10 +2512,18 @@ function renderBoard() {
         if(p.id === cp.id) return;
         p.units.forEach(u => {
           const d = chebyshevDist(selUnit.r, selUnit.c, u.r, u.c);
-          if(d <= weapon.range && !cp.attackedThisTurn.includes(u.id)) {
+          const inRange = d <= weapon.range && (!weapon.minRange || d >= weapon.minRange);
+          if(inRange && !cp.attackedThisTurn.includes(u.id)) {
             attackHighlights.add(`${u.r},${u.c}`);
           }
         });
+      });
+      // Highlight enemy extractors as attack targets too
+      G.extractors.forEach(ext => {
+        if(ext.faction === cp.faction) return;
+        const d = chebyshevDist(selUnit.r, selUnit.c, ext.r, ext.c);
+        const inRange = d <= weapon.range && (!weapon.minRange || d >= weapon.minRange);
+        if(inRange) attackHighlights.add(`${ext.r},${ext.c}`);
       });
     }
   }
@@ -2405,7 +2551,12 @@ function renderBoard() {
       const key = `${r},${c}`;
       if(moveHighlights.has(key)) cell.classList.add('highlight-move');
       if(attackHighlights.has(key)) cell.classList.add('highlight-attack');
+      if(flashbangHighlights.has(key)) cell.classList.add('highlight-flashbang');
       if(isTradeZone(r,c)) cell.classList.add('trade-zone');
+
+      // Extraction zone highlighting
+      const ez = getExtractionZoneAt(r, c);
+      if(ez) cell.classList.add('extraction-zone', 'ez-' + ez.resource);
       
       if(mistCells.has(key)) {
         let mistLayer = document.createElement('div');
@@ -2430,6 +2581,15 @@ function renderBoard() {
         let mineToken = document.createElement('div');
         mineToken.className = 'mine-token';
         cell.appendChild(mineToken);
+      }
+
+      // Extractor token
+      const extractorHere = G.extractors.find(e => e.r === r && e.c === c);
+      if(extractorHere) {
+        const ext = document.createElement('div');
+        ext.className = 'extractor-token extractor-' + extractorHere.faction;
+        ext.title = `Extractor (${FACTIONS[extractorHere.faction].name}) – ${extractorHere.hp} HP`;
+        cell.appendChild(ext);
       }
       
       const unitHere = getUnitAt(r,c);
@@ -2508,6 +2668,14 @@ function addBoardLabels() {
     }
   }
   
+  // Extraction zone labels
+  EXTRACTION_ZONES.forEach(ez => {
+    labelData.push({
+      r: ez.r1, c: ez.c1, text: ez.label + ' ' + ez.resource, color: '#ffffff',
+      opacity: 0.3, fontSize: '0.38rem', top: '2px', left: '2px'
+    });
+  });
+
   labelData.forEach(l => {
     const idx = l.r * BOARD_SIZE + l.c;
     const cells = board.querySelectorAll('.board-cell');
@@ -2540,22 +2708,29 @@ function updateUI() {
     banner.textContent = cp ? cp.name.toUpperCase() + "'S TURN" : 'WAITING...';
     banner.className = 'turn-banner enemy-turn';
   }
-  
   const apDisp = document.getElementById('ap-display');
   apDisp.innerHTML = '<span class="ap-label">AP</span>';
-  for(let i=0;i<4;i++) {
+  const maxPips = Math.max(4, cp.ap);
+  for(let i=0;i<maxPips;i++) {
     const pip = document.createElement('div');
     pip.className = 'ap-pip' + (i < cp.ap ? '' : ' used');
     apDisp.appendChild(pip);
   }
   
   const plist = document.getElementById('players-list');
-  plist.innerHTML = G.players.map(p => `
+  plist.innerHTML = G.players.map(p => {
+    const freeCount = p.units.filter(u => !u.prisoner).length;
+    const prisonerCount = p.units.filter(u => u.prisoner).length;
+    const soldierStr = prisonerCount > 0
+      ? `${freeCount}🎲 <span style="opacity:0.5;font-size:0.7rem">${prisonerCount}⛓</span>`
+      : `${freeCount}🎲`;
+    return `
     <div class="player-entry ${p.id===cp.id?'active-player':''}">
       <div class="p-dot" style="background:${FACTIONS[p.faction].color}"></div>
-      <span class="p-name">${p.name}${p.isAI?' 🤖':''}</span>
-      <span class="p-soldiers">${p.units.length}🎲</span>
-    </div>`).join('');
+      <span class="p-name">${p.name}${p.isAI?' 🤖':''}${!p.alive?' 💀':''}</span>
+      <span class="p-soldiers">${soldierStr}</span>
+    </div>`;
+  }).join('');
   
   const selUnit = G.selectedUnit ? getSelectedUnitObj() : null;
   const selPanel = document.getElementById('selected-unit-panel');
@@ -2579,17 +2754,33 @@ function updateUI() {
   const hasUnit = !!selUnit && G.selectedUnit?.playerId === G.myId;
   const myTurn = isMyTurn();
   const hasItems = myP.inventory.some(inv => RECIPES.find(r => r.id === inv.id && r.isItem));
+  const inTargetMode = G.mode === 'flashbang_target';
+
+  // Show active mode hint in the banner
+  if(myTurn && G.mode === 'move') {
+    banner.textContent = '🚶 SELECT DESTINATION';
+    banner.className = 'turn-banner';
+  } else if(myTurn && G.mode === 'attack') {
+    banner.textContent = '⚔ SELECT TARGET';
+    banner.className = 'turn-banner';
+  } else if(myTurn && G.mode === 'hostage') {
+    banner.textContent = '⛓ SELECT HOSTAGE';
+    banner.className = 'turn-banner';
+  } else if(myTurn && G.mode === 'flashbang_target') {
+    banner.textContent = '💥 SELECT FLASHBANG CENTER';
+    banner.className = 'turn-banner';
+  }
   
-  document.getElementById('btn-move').disabled = !hasUnit || !myTurn || cp.ap<1;
-  document.getElementById('btn-attack').disabled = !hasUnit || !myTurn || cp.ap<1;
-  document.getElementById('btn-collect').disabled = !hasUnit || !myTurn || cp.ap<1;
-  document.getElementById('btn-heal').disabled = !hasUnit || !myTurn || cp.ap<1;
-  document.getElementById('btn-craft').disabled = !hasUnit || !myTurn || cp.ap<1;
-  document.getElementById('btn-new-soldier').disabled = !myTurn || cp.ap<2;
-  document.getElementById('btn-inventory').disabled = !hasUnit || !myTurn || !hasItems;
-  document.getElementById('btn-surrender').disabled = !hasUnit || !myTurn;
-  document.getElementById('btn-hostage').disabled = !hasUnit || !myTurn || cp.ap<1;
-  document.getElementById('btn-end-turn').disabled = !myTurn;
+  document.getElementById('btn-move').disabled = !hasUnit || !myTurn || cp.ap<1 || inTargetMode;
+  document.getElementById('btn-attack').disabled = !hasUnit || !myTurn || cp.ap<1 || inTargetMode;
+  document.getElementById('btn-collect').disabled = !hasUnit || !myTurn || cp.ap<1 || inTargetMode;
+  document.getElementById('btn-heal').disabled = !hasUnit || !myTurn || cp.ap<1 || inTargetMode;
+  document.getElementById('btn-craft').disabled = !hasUnit || !myTurn || cp.ap<1 || inTargetMode;
+  document.getElementById('btn-new-soldier').disabled = !myTurn || cp.ap<2 || inTargetMode;
+  document.getElementById('btn-inventory').disabled = !hasUnit || !myTurn || !hasItems || inTargetMode;
+  document.getElementById('btn-surrender').disabled = !hasUnit || !myTurn || inTargetMode;
+  document.getElementById('btn-hostage').disabled = !hasUnit || !myTurn || cp.ap<1 || inTargetMode;
+  document.getElementById('btn-end-turn').disabled = !myTurn || inTargetMode;
   
   const resDisplay = document.getElementById('resource-display');
   resDisplay.innerHTML = RESOURCES.map(r => `
@@ -2749,7 +2940,8 @@ function aiPlanTurn(cp, actions) {
           p.units.forEach(u=>{
             if(cp.attackedThisTurn.includes(u.id)) return;
             const d = chebyshevDist(unit.r,unit.c,u.r,u.c);
-            if(d<=weapon.range && d<bestD && !isTradeZone(unit.r,unit.c)){
+            const inRange = d<=weapon.range && (!weapon.minRange || d>=weapon.minRange);
+            if(inRange && d<bestD && !isTradeZone(unit.r,unit.c)){
               bestD=d; target={player:p,unit:u};
             }
           });
@@ -2806,8 +2998,19 @@ function aiPlanTurn(cp, actions) {
         const enemy = nearestEnemy(unit);
         if(enemy) {
           const weapon = validWeapons[0];
+          const idealRange = weapon.minRange || 1;
           if(enemy.dist > weapon.range) {
-            dest = {r:enemy.unit.r, c:enemy.unit.c};
+            // Move toward enemy but stop at minRange if applicable
+            if(weapon.minRange && enemy.dist <= weapon.range) {
+              // Already in range band — don't move
+            } else {
+              dest = {r:enemy.unit.r, c:enemy.unit.c};
+            }
+          } else if(weapon.minRange && enemy.dist < weapon.minRange) {
+            // Too close (e.g. gun) — back away: pick a cell at minRange distance
+            const dr = Math.sign(unit.r - enemy.unit.r);
+            const dc = Math.sign(unit.c - enemy.unit.c);
+            dest = {r: unit.r + dr * 2, c: unit.c + dc * 2};
           }
         }
       }
@@ -2883,4 +3086,3 @@ document.querySelectorAll('.faction-btn').forEach(btn => {
 </script>
 </body>
 </html>
-  
